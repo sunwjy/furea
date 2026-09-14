@@ -60,6 +60,30 @@ _Avoid_: Paused, archived, inactive, soft-deleted
 One request to the redirect path that was answered with a redirect to a link's destination. Bots and link-preview crawlers count as clicks; telling them apart is an analytics concern.
 _Avoid_: Hit, visit, view, request
 
+**Click facts**:
+The only four things remembered about a click: the slug, the visitor's country, the referrer host and the device class. Nothing derived from the visitor's IP address is ever among them.
+_Avoid_: Click event, analytics payload, tracking data
+
+**Device class**:
+A coarse label for what sent a click: `desktop`, `mobile`, `tablet`, `bot` or `unknown`. `bot` marks obvious crawlers and link-preview fetchers; it is a label, not a filter.
+_Avoid_: User agent, platform, bot flag
+
+**Referrer host**:
+The hostname of the page a click came from, or `direct` when there was none. Never the full referring URL.
+_Avoid_: Referrer, source, origin
+
+**Lifetime total**:
+The exact number of clicks a link has received since it was created. It is never estimated and never expires.
+_Avoid_: Click count, hits, total clicks
+
+**Click breakdown**:
+Any per-period view of clicks (time series, top countries, top referrer hosts, device classes). Breakdowns cover the last 90 days and are estimates.
+_Avoid_: Stats, analytics, report, insights
+
+**Analytics token**:
+The read-only credential an instance needs to compute click breakdowns. Without it the instance still counts clicks and shows lifetime totals, but no breakdowns.
+_Avoid_: API token, Cloudflare token, secret
+
 **Redirect cache**:
 The copy of every link that the redirect path consults first. It mirrors the links and may lag a short time behind an edit; it is never the source of truth.
 _Avoid_: KV, hot cache, edge cache, lookup table

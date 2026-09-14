@@ -60,6 +60,22 @@ _Avoid_: Paused, archived, inactive, soft-deleted
 One request to the redirect path that was answered with a redirect to a link's destination. Bots and link-preview crawlers count as clicks; telling them apart is an analytics concern.
 _Avoid_: Hit, visit, view, request
 
+**Redirect cache**:
+The copy of every link that the redirect path consults first. It mirrors the links and may lag a short time behind an edit; it is never the source of truth.
+_Avoid_: KV, hot cache, edge cache, lookup table
+
+**Cache entry**:
+The redirect cache's record for one link: enough to answer a redirect or to answer a disabled link like an unknown slug, and nothing more.
+_Avoid_: Cached link, KV value
+
+**Sync pending**:
+The state of a link whose latest change is saved but has not yet reached the redirect cache. The instance clears it on its own; it is a status shown to the operator, never an error.
+_Avoid_: Dirty, stale, unsynced, failed
+
+**Unknown-slug response**:
+What a visitor receives for a slug that matches no link. A disabled link produces the same response. Its exact form is decided separately from the cache.
+_Avoid_: 404 page, not found, error page
+
 **Reserved path**:
 A top-level path that can never be a slug because the instance uses it for itself: `admin`, `api`, `favicon.ico`, `robots.txt`, and anything starting with `_` or `.`. Reservation is checked case-insensitively, so `Admin` and `API` are reserved too.
 _Avoid_: Blocked slug, system route

@@ -63,3 +63,23 @@ _Avoid_: Hit, visit, view, request
 **Reserved path**:
 A top-level path that can never be a slug because the instance uses it for itself: `admin`, `api`, `favicon.ico`, `robots.txt`, and anything starting with `_` or `.`. Reservation is checked case-insensitively, so `Admin` and `API` are reserved too.
 _Avoid_: Blocked slug, system route
+
+**Operator password**:
+The single credential that opens the admin surface. The installer creates it and prints it once; the operator can change it from the admin surface or reset it from the CLI. There is no username.
+_Avoid_: Admin password, login, account
+
+**Session**:
+A browser's proof that the operator has logged in, carried in a cookie and valid for a fixed period. An operator may hold several at once; changing the operator password ends all of them.
+_Avoid_: Token, login token, auth cookie
+
+**API key**:
+A long secret an operator creates so a script can call the public API without a session. Shown once, identified afterwards by its name and a short prefix, revocable at any time.
+_Avoid_: Token, access token, secret, credential
+
+**Scope**:
+What an API key may do: `read` (list links and read analytics) or `write` (everything). There are no finer scopes.
+_Avoid_: Permission, role, grant
+
+**Access mode**:
+The instance setting under which Cloudflare Access, not the operator password, decides who is the operator. Turning it on hides the password login; API keys keep working.
+_Avoid_: SSO mode, Zero Trust mode, enterprise mode

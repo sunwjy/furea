@@ -42,7 +42,7 @@ Decided in [Decide: admin authentication and API key model](https://github.com/s
 
 ## Brute force
 
-Login attempts are throttled with the Workers Rate Limiting binding if it is usable on the free plan and through the installer's API deploy path (pending [research](https://github.com/sunwjy/furea/issues/1)); until confirmed, the floor is a constant-time compare plus a fixed delay on failure. Per-IP counters in D1 are ruled out because the instance never stores raw IPs.
+Login attempts are throttled with the Workers Rate Limiting binding if it is usable on the free plan and through the installer's API deploy path (pending [research](https://github.com/sunwjy/furea/issues/16)); until confirmed, the floor is a constant-time compare plus a fixed delay on failure. Per-IP counters in D1 are ruled out because the instance never stores raw IPs.
 
 ## Out of v1
 

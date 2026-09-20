@@ -123,3 +123,23 @@ _Avoid_: Permission, role, grant
 **Access mode**:
 The instance setting under which Cloudflare Access, not the operator password, decides who is the operator. Turning it on hides the password login; API keys keep working.
 _Avoid_: SSO mode, Zero Trust mode, enterprise mode
+
+**Installer**:
+The command-line tool (`npx furea`) an operator runs on their own machine to create, upgrade, inspect or remove an instance. It talks to Cloudflare directly; nothing of it runs inside the instance.
+_Avoid_: CLI (when the instance's own API is meant), wrangler, deployer
+
+**Deploy**:
+One run of the installer that brings an instance up to the installer's own version: the same action installs a new instance and upgrades an existing one. Re-running it is always safe.
+_Avoid_: Install, upgrade, publish, migrate
+
+**Instance name**:
+The name an operator gives an instance (default `furea`) that identifies every Cloudflare resource belonging to it. Several instances with different names can share one Cloudflare account.
+_Avoid_: Project name, worker name, app name
+
+**Deploy token**:
+The Cloudflare API token the installer uses to create and change an instance's resources. It lives only on the operator's machine or in CI and is never placed inside the instance. Distinct from the analytics token.
+_Avoid_: API token, Cloudflare token, credentials
+
+**Local credentials**:
+The one file on the operator's machine that holds deploy tokens, one per Cloudflare account. It is the installer's only local state; everything about an instance is read back from Cloudflare.
+_Avoid_: Config file, project config, state file

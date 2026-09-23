@@ -175,3 +175,19 @@ _Avoid_: Frontend build, static files, SPA bundle
 **Migration**:
 One numbered SQL file that moves an instance's database schema forward by one step. Migrations are applied in order, each exactly once, before the Worker that needs them is uploaded, and every migration must leave the previous release's Worker working.
 _Avoid_: Schema change, DB update, patch
+
+**Release**:
+One published version of the package, cut by merging the release PR that changesets prepares. A release is the only thing that moves what bare `npx furea` installs.
+_Avoid_: Deploy, publish, build, version bump
+
+**Release PR**:
+The pull request changesets opens on `main` that turns pending changesets into the next version number and changelog entry; merging it is the maintainer's act of cutting a release.
+_Avoid_: Version Packages PR, bump PR
+
+**Changeset**:
+The note a contributor adds to a pull request stating how the change affects the next release (patch or minor) and, when a migration is added, naming its file.
+_Avoid_: Release note, changelog entry
+
+**Snapshot**:
+A throwaway version of the package published from any branch so a build can be tried on a real instance before it becomes a release. It is never promoted and never what `npx furea` resolves by default.
+_Avoid_: Pre-release, beta, canary, nightly

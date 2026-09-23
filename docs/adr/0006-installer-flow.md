@@ -78,4 +78,4 @@ Deletes the custom domain, the Worker, the KV namespace and the D1 database. The
 
 - The package that ships the CLI must also carry the migrations directory and the built assets; how they are laid out is decided in *Decide: monorepo package boundaries and how the Worker bundle ships inside the npm package*.
 - Migration authors follow the expand-only rule; a test that applies the new migrations to the previous release's schema and boots the previous Worker against it would enforce it.
-- The Cloudflare Rate Limiting binding's free-plan availability is still unverified; if the binding upload is rejected on a free account, `deploy` must degrade to the fixed-delay floor of ADR 0003 rather than fail.
+- The Cloudflare Rate Limiting binding is verified to upload and work on a Workers Free account ([#17](https://github.com/sunwjy/furea/issues/17)); `deploy` therefore declares the two `ratelimit` bindings of ADR 0003 unconditionally and treats a rejected binding as a hard error (a malformed binding or an API change, not a plan limit).

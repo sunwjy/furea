@@ -42,7 +42,7 @@ Decided in [Decide: admin authentication and API key model](https://github.com/s
 
 ## Brute force
 
-Login attempts are throttled with the Workers Rate Limiting binding if it is usable on the free plan and through the installer's API deploy path (see [`docs/research/rate-limiting-binding.md`](../research/rate-limiting-binding.md), [#16](https://github.com/sunwjy/furea/issues/16)); until confirmed, the floor is a constant-time compare plus a fixed delay on failure. Per-IP counters in D1 are ruled out because the instance never stores raw IPs.
+Login attempts are throttled with the Workers Rate Limiting binding, which is verified to be accepted on the Workers Free plan through the installer's multipart API upload and to deny calls once its limit is reached (see [`docs/research/rate-limiting-binding.md`](../research/rate-limiting-binding.md), [#16](https://github.com/sunwjy/furea/issues/16); smoke test [#17](https://github.com/sunwjy/furea/issues/17), [`scripts/rate-limit-smoke.mjs`](../../scripts/rate-limit-smoke.mjs)). Two bindings guard the login endpoint: a per-client limiter keyed by a salted hash of the IP (`limit: 5`, `period: 60`) and a per-instance limiter with a constant key (`limit: 30`, `period: 60`); each uses a fixed large `namespace_id` reserved for furea so counters are not shared with the operator's other Workers. Counters are per Cloudflare location and permissive (the smoke test let 7 of `limit: 5` through before the first denial), so the binding is a brake, not an exact accounting: the floor remains a constant-time compare plus a fixed delay on every failed attempt. Per-IP counters in D1 are ruled out because the instance never stores raw IPs.
 
 ## Out of v1
 

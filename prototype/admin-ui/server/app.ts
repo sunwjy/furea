@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import { links, findLink, generateSlug, breakdown, instanceOverview, type Range } from './data';
 import { ssr } from './ssr';
+import { v1, proto } from './v1';
 
 export const app = new Hono({ strict: false });
 
@@ -12,6 +13,8 @@ const asRange = (v: string | undefined): Range => (['24h', '7d', '30d', '90d'].i
 app.get('/', (c) =>
   c.html(`<h1 style="font:16px system-ui">furea PROTOTYPE</h1>
   <ul style="font:14px system-ui">
+    <li><a href="/admin/?variant=E">E — confirmed feed shell + login / API keys / settings (ticket #20)</a></li>
+    <li><a href="/admin/?variant=F">F — same shell, Security page groups password / Access / API keys (ticket #20)</a></li>
     <li><a href="/admin/?variant=A">SPA variant A — table + pages</a></li>
     <li><a href="/admin/?variant=B">SPA variant B — master-detail</a></li>
     <li><a href="/admin/?variant=C">SPA variant C — feed + drawer</a></li>
@@ -19,7 +22,11 @@ app.get('/', (c) =>
   </ul>`),
 );
 
-// ---- mock public API (shape is NOT decided yet; see ticket #15) ----
+// ---- ADR 0009 mock (ticket #20 screens, variants E/F) ----
+app.route('/api/v1', v1);
+app.route('/__proto', proto);
+
+// ---- old placeholder API used by variants A-D (ticket #11; shape predates ADR 0009) ----
 app.get('/api/links', (c) => c.json({ links: [...links].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }));
 app.get('/api/links/:slug', (c) => {
   const l = findLink(c.req.param('slug'));

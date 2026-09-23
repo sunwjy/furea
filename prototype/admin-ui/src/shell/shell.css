@@ -1,0 +1,48 @@
+/* PROTOTYPE styles for the ticket #20 shell (variants E/F). Builds on the .c-* feed styles of variant C. */
+.s-nav { display: flex; gap: 18px; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.s-nav b { font-size: 20px; margin-right: 8px; }
+.s-nav a { color: var(--muted); text-decoration: none; } .s-nav a.active { color: var(--text); font-weight: 600; }
+.s-who { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.s-loading { padding: 40px; color: var(--muted); }
+.s-feed-head { display: flex; gap: 8px; } .s-feed-head input { flex: 1; }
+.s-hint { font-size: 13px; color: var(--text); background: #f2f4f7; border: 1px dashed #cfd4dc; border-radius: var(--radius); padding: 8px 10px; }
+.s-notice { background: #fffaeb; border: 1px solid #fedf89; color: #7a2e0e; border-radius: var(--radius); padding: 10px 12px; margin: 12px 0; font-size: 13px; }
+.s-notice button { padding: 2px 8px; font-size: 12px; margin-left: 4px; }
+.s-ok { color: #067647; font-size: 13px; margin-top: 6px; }
+.s-field-err { color: var(--danger); font-size: 12px; margin-top: 3px; }
+.s-small { font-size: 12px; }
+.s-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.s-page { max-width: 560px; } .s-page.wide { max-width: 760px; }
+.s-page h1 { font-size: 22px; margin: 0 0 8px; }
+.s-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.s-link-head { display: flex; align-items: center; gap: 10px; } .s-link-head h1 { font-size: 20px; margin: 0; }
+.s-dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 0 0 8px; font-size: 13px; }
+.s-dl dt { color: var(--muted); } .s-dl dd { margin: 0; overflow-wrap: anywhere; }
+.s-section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 14px 0; }
+.s-section-head { display: flex; align-items: center; gap: 8px; } .s-section h2 { font-size: 15px; margin: 0; }
+.s-section p { font-size: 13px; }
+.badge.off-grey { background: #eef0f3; color: var(--muted); }
+.s-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.s-table th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.s-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.s-table td button { padding: 2px 8px; font-size: 12px; }
+.s-radio { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; color: var(--text); }
+.s-radio input { width: auto; }
+.s-reveal { background: #ecfdf3; border: 1px solid #abefc6; border-radius: var(--radius); padding: 12px; margin: 10px 0; font-size: 13px; }
+.s-keybox { display: flex; gap: 8px; align-items: center; margin: 8px 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; }
+.s-keybox code { flex: 1; overflow-wrap: anywhere; }
+.s-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 600; }
+.s-modal { background: var(--panel); border-radius: 12px; padding: 20px; width: min(520px, 92vw); box-shadow: 0 20px 50px rgba(0,0,0,.25); font-size: 13px; }
+.s-login { min-height: 100vh; display: grid; place-items: center; }
+.s-login-card { width: min(360px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+.s-login-card h1 { margin: 0 0 4px; font-size: 22px; } .s-login-card h2 { font-size: 16px; }
+.s-login-card p { font-size: 13px; }
+
+.proto-scenario { position: fixed; right: 16px; bottom: 16px; z-index: 1001; font-size: 12px; }
+.proto-scenario-toggle { background: #ff2d95; color: #fff; border: 0; border-radius: 999px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.proto-scenario-body { position: absolute; right: 0; bottom: 40px; width: 330px; background: #1f0a17; color: #ffd6ec; border: 2px solid #ff2d95; border-radius: 10px; padding: 10px; }
+.proto-scenario-body label { display: flex; gap: 6px; align-items: center; color: #ffd6ec; margin: 4px 0; font-size: 12px; }
+.proto-scenario-body label input { width: auto; }
+.proto-scenario-btns { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.proto-scenario-btns button { font-size: 11px; padding: 2px 6px; }
+.proto-scenario-body pre { max-height: 200px; overflow: auto; font-size: 10px; background: #000; color: #9f9; padding: 6px; margin: 0; }

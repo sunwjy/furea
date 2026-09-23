@@ -1,11 +1,12 @@
 // Floating bottom bar. Hidden in production builds.
 import { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { VARIANTS } from './App';
 
 export function PrototypeSwitcher({ current }: { current: string }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   if (import.meta.env.PROD) return null;
   const idx = VARIANTS.findIndex((v) => v.key === current);
   const go = (delta: number) => {
@@ -13,7 +14,9 @@ export function PrototypeSwitcher({ current }: { current: string }) {
     if ('href' in next) { window.location.href = next.href; return; }
     const p = new URLSearchParams(params);
     p.set('variant', next.key);
-    navigate({ pathname: '/', search: `?${p}` }, { replace: true });
+    // E <-> F keep the current page unless it only exists in one of them
+    const shell = ['E', 'F'].includes(current) && ['E', 'F'].includes(next.key) && !/^\/(keys|security)/.test(pathname);
+    navigate({ pathname: shell ? pathname : '/', search: `?${p}` }, { replace: true });
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

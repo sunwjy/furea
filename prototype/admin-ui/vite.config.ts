@@ -13,7 +13,7 @@ function honoMock(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = (req as { url?: string }).url ?? '/';
-        if (!(url === '/' || url.startsWith('/api/') || url.startsWith('/ssr'))) return next();
+        if (!(url === '/' || url.startsWith('/api/') || url.startsWith('/ssr') || url.startsWith('/__proto'))) return next();
         const mod = await server.ssrLoadModule('/server/app.ts');
         return getRequestListener(mod.app.fetch)(req, res);
       });

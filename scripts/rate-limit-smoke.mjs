@@ -4,7 +4,10 @@
 // and does the binding actually deny the sixth call?
 //
 // Usage:
-//   CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node scripts/rate-limit-smoke.mjs [--keep]
+//   CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... node scripts/rate-limit-smoke.mjs [--keep] [--calls=15]
+//
+// Counters are per Cloudflare location, so calls are grouped by `colo` in the
+// report; the limit only trips once a single colo has seen more than `limit` calls.
 //
 // Token needs: Workers Scripts Edit (+ Account Settings Read for the plan check).
 // The script uploads a throwaway Worker named `furea-ratelimit-smoke`, enables its
@@ -13,6 +16,7 @@
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 const keep = process.argv.includes("--keep");
+const callCount = Number((process.argv.find((a) => a.startsWith("--calls=")) ?? "--calls=15").slice(8));
 const scriptName = "furea-ratelimit-smoke";
 const API = "https://api.cloudflare.com/client/v4";
 
@@ -59,6 +63,11 @@ step("subscriptions (empty or no Workers Paid line => Free plan)", {
   subscriptions: subSummary,
   errors: subs.json.errors,
 });
+
+const wsub = await cf("GET", `/accounts/${accountId}/workers/subscription`);
+step("workers subscription probe (404/empty => no Workers Paid subscription)", { status: wsub.status, result: wsub.json.result, errors: wsub.json.errors });
+const settings = await cf("GET", `/accounts/${accountId}/workers/account-settings`);
+step("workers account settings", { status: settings.status, result: settings.json.result, errors: settings.json.errors });
 
 const sub = await cf("GET", `/accounts/${accountId}/workers/subdomain`);
 const subdomain = sub.json.result?.subdomain;
@@ -121,14 +130,16 @@ for (let attempt = 0; attempt < 12; attempt++) {
   if (r.status === 200) break;
   await new Promise((res) => setTimeout(res, 5000));
 }
-for (let i = 1; i <= 6; i++) {
+for (let i = 1; i <= callCount; i++) {
   const res = await fetch(`${url}?key=${key}`);
   const text = await res.text();
   let body;
   try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
   calls.push({ call: i, status: res.status, ...body });
 }
-step("six limit() calls, one key (expect success x5 then false)", { url, key, calls });
+const perColo = {};
+for (const c of calls) (perColo[c.colo] ??= []).push(c.success);
+step(`${callCount} limit() calls, one key (expect the 6th call within one colo to be false)`, { url, key, calls, perColo });
 
 // 5. Cleanup
 if (!keep) {

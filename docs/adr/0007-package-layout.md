@@ -34,6 +34,7 @@ furea/
   dist/worker/index.js       # esbuild, single ES module, not minified, no source map
   dist/worker/manifest.json  # compatibility_date, compatibility_flags, main module name, binding names
   dist/assets/admin/...      # Vite output; the assets root is dist/assets, so files serve under /admin/
+  dist/assets/favicon.ico    # served by Cloudflare at /favicon.ico before the Worker runs (ADR 0008)
   migrations/0001_<name>.sql # copied verbatim from apps/worker/migrations, meta files excluded
 ```
 

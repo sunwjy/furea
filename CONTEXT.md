@@ -97,8 +97,12 @@ The state of a link whose latest change is saved but has not yet reached the red
 _Avoid_: Dirty, stale, unsynced, failed
 
 **Unknown-slug response**:
-What a visitor receives for a slug that matches no link. A disabled link produces the same response. Its exact form is decided separately from the cache.
+The one fixed answer a visitor receives for any path that resolves to no link: a slug that does not exist, a disabled link, or a malformed path. It is never recorded anywhere and never counts as a click. See ADR 0008 for its form.
 _Avoid_: 404 page, not found, error page
+
+**Root destination**:
+An optional URL the operator sets so that visitors of the instance's bare hostname are redirected there. It follows the same rules as a link's destination, but it is not a link: a redirect to it is never a click. Without it, the root answers with the unknown-slug response.
+_Avoid_: Home URL, fallback URL, default redirect, landing page
 
 **Reserved path**:
 A top-level path that can never be a slug because the instance uses it for itself: `admin`, `api`, `favicon.ico`, `robots.txt`, and anything starting with `_` or `.`. Reservation is checked case-insensitively, so `Admin` and `API` are reserved too.

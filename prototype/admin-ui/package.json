@@ -1,0 +1,24 @@
+{
+  "name": "furea-prototype-admin-ui",
+  "private": true,
+  "version": "0.0.0",
+  "description": "PROTOTYPE - throwaway admin UI variants for furea (wayfinder ticket #11). Not production code.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --open /admin/?variant=A"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0"
+  }
+}

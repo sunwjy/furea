@@ -143,3 +143,23 @@ _Avoid_: API token, Cloudflare token, credentials
 **Local credentials**:
 The one file on the operator's machine that holds deploy tokens, one per Cloudflare account. It is the installer's only local state; everything about an instance is read back from Cloudflare.
 _Avoid_: Config file, project config, state file
+
+**Package**:
+The one thing published to npm under the name `furea`: the installer together with everything an instance needs (the Worker bundle, the admin assets and the migrations) at one version. There is nothing else to install.
+_Avoid_: CLI package, distribution, release artifact
+
+**Worker bundle**:
+The single built script file the installer uploads as the Worker. It is built from source at release time; an operator only ever sees the bundle, and can read it in the Cloudflare dashboard.
+_Avoid_: Build, script, artifact
+
+**Worker manifest**:
+The small file built alongside the Worker bundle that tells the installer what the bundle expects from its deployment: compatibility settings and the names of its bindings. It is the only agreement between installer and Worker.
+_Avoid_: Config, metadata, wrangler.toml
+
+**Admin assets**:
+The built files of the admin surface that the installer uploads as static assets so they are served under `/admin/` without touching the Worker.
+_Avoid_: Frontend build, static files, SPA bundle
+
+**Migration**:
+One numbered SQL file that moves an instance's database schema forward by one step. Migrations are applied in order, each exactly once, before the Worker that needs them is uploaded, and every migration must leave the previous release's Worker working.
+_Avoid_: Schema change, DB update, patch

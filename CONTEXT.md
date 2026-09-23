@@ -191,3 +191,19 @@ _Avoid_: Release note, changelog entry
 **Snapshot**:
 A throwaway version of the package published from any branch so a build can be tried on a real instance before it becomes a release. It is never promoted and never what `npx furea` resolves by default.
 _Avoid_: Pre-release, beta, canary, nightly
+
+**Test tier**:
+One of the five named groups of checks (Static, Unit, E2E, Compat, Integration) that decide whether a change may merge or ship. Which tiers run where is stated in `docs/testing.md`.
+_Avoid_: Test suite, test level, stage
+
+**Compat check**:
+The check that applies a change's new migrations to the previous release's schema and drives the previous release's Worker over it, proving the expand-only rule for that change.
+_Avoid_: Migration test, backward-compat test, expand-only test
+
+**CI instance**:
+A throwaway instance the integration tier installs, upgrades and destroys on the CI account for one CI run; named `furea-ci-<sha>`, never an operator's instance.
+_Avoid_: Test instance, staging, scratch instance
+
+**CI account**:
+The Cloudflare account, separate from any operator's, that the integration tier deploys CI instances into.
+_Avoid_: Test account, staging account

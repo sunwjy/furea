@@ -7,7 +7,7 @@ How a change on `main` becomes a published `furea` version. The hard-to-reverse 
 1. A pull request that changes user-visible behaviour includes a **changeset** (`pnpm changeset`). Only `furea` is versioned (ADR 0007).
 2. On merge to `main`, `release.yml` runs `changesets/action`. With pending changesets it opens or updates the **release PR** titled `chore: release furea` (branch `changeset-release/main`), which bumps `packages/cli/package.json`, rewrites `packages/cli/CHANGELOG.md` and deletes the consumed changeset files.
 3. The maintainer merges the release PR. `release.yml` runs again, finds no pending changesets and runs `pnpm release`.
-4. `pnpm release` = `turbo build` → `turbo test lint typecheck` → tarball check → `changeset publish`. On success the action pushes the git tag `furea@<version>` and creates a GitHub Release whose body is the CHANGELOG entry.
+4. `pnpm release` = `turbo build` → `turbo test lint typecheck` → tarball check → E2E → Compat check → Integration deploy on the CI account (`docs/testing.md`) → `changeset publish`. On success the action pushes the git tag `furea@<version>` and creates a GitHub Release whose body is the CHANGELOG entry.
 
 ## Version meaning in 0.x
 
@@ -38,7 +38,9 @@ Both files live in `.github/workflows/`.
 
 ### `ci.yml` (pull requests and pushes to `main`)
 
-- `pnpm install --frozen-lockfile`, `turbo build lint typecheck test`.
+- `pnpm install --frozen-lockfile`, `turbo build lint typecheck test`, then `pnpm test:e2e`.
+- **Compat check** (`pnpm test:compat`) only when the PR touches `apps/worker/migrations/` (path filter); see `docs/testing.md`.
+- No Integration tier on pull requests: fork PRs cannot read the `cloudflare-ci` secrets. A separate `integration` job runs on pushes to `main` and reports without blocking.
 - **Tarball check**: `pnpm --filter furea pack --dry-run --json` must list `bin/furea.js`, `dist/cli/index.js`, `dist/worker/index.js`, `dist/worker/manifest.json`, at least one file under `dist/assets/admin/`, `dist/assets/favicon.ico` and every `migrations/*.sql` present in `apps/worker/migrations/`; nothing else outside `package.json`, `README.md` and `LICENSE`. This is the mechanical form of ADR 0007's "the installer can never deploy a Worker of a different version than itself".
 - Migration/changeset consistency check (above).
 
@@ -46,7 +48,7 @@ Both files live in `.github/workflows/`.
 
 Trusted publishing binds one workflow filename, so both publish paths are here.
 
-- **`release` job** — `on: push` to `main`. Permissions `contents: write`, `pull-requests: write`, `id-token: write`; environment `npm-publish`; `concurrency: release`. Steps: checkout with `fetch-depth: 0`, `pnpm/action-setup`, `actions/setup-node` with Node 24 and **no `registry-url`**, install, then `changesets/action` with `version: pnpm changeset version`, `publish: pnpm release`, `createGithubReleases: true`, `commitMode: github-api` (signed commits without a bot key), `title`/`commit`: `chore: release furea`. Env: `GITHUB_TOKEN`, `NPM_CONFIG_PROVENANCE: "true"`.
+- **`release` job** — `on: push` to `main`. Permissions `contents: write`, `pull-requests: write`, `id-token: write`; environment `npm-publish`; `concurrency: release`. Steps: checkout with `fetch-depth: 0`, `pnpm/action-setup`, `actions/setup-node` with Node 24 and **no `registry-url`**, install, then `changesets/action` with `version: pnpm changeset version`, `publish: pnpm release`, `createGithubReleases: true`, `commitMode: github-api` (signed commits without a bot key), `title`/`commit`: `chore: release furea`. Env: `GITHUB_TOKEN`, `NPM_CONFIG_PROVENANCE: "true"`, plus `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the `cloudflare-ci` environment for the Integration deploy, which `pnpm release` runs as a **hard gate** before `changeset publish` (`docs/testing.md`).
 - **`snapshot` job** — `on: workflow_dispatch` with an optional `ref` input. Permissions `contents: read`, `id-token: write`; environment `npm-publish`. Steps: checkout the ref, same toolchain, install, `pnpm changeset version --snapshot ${SHORT_SHA}`, `pnpm release:snapshot` (= build, tests, tarball check, `changeset publish --no-git-tag --tag snapshot`). No git tag, no GitHub Release.
 - Repository setting "Allow GitHub Actions to create and approve pull requests" must be on for the release PR.
 
@@ -55,8 +57,11 @@ Trusted publishing binds one workflow filename, so both publish paths are here.
 ```json
 {
   "changeset": "changeset",
-  "release": "turbo run build lint typecheck test && node scripts/check-tarball.mjs && changeset publish",
-  "release:snapshot": "turbo run build lint typecheck test && node scripts/check-tarball.mjs && changeset publish --no-git-tag --tag snapshot"
+  "release": "turbo run build lint typecheck test && node scripts/check-tarball.mjs && pnpm test:e2e && pnpm test:compat && pnpm test:integration && changeset publish",
+  "release:snapshot": "turbo run build lint typecheck test && node scripts/check-tarball.mjs && changeset publish --no-git-tag --tag snapshot",
+  "test:e2e": "pnpm --filter admin test:e2e",
+  "test:compat": "node scripts/check-expand-only.mjs",
+  "test:integration": "node scripts/integration.mjs"
 }
 ```
 
@@ -67,7 +72,7 @@ Trusted publishing binds one workflow filename, so both publish paths are here.
 1. Enable 2FA on the npm account that will own `furea`.
 2. First release: on `main` at the commit that bumps `packages/cli` to `0.1.0`, run `pnpm release` locally with `npm login` done (this is the only publish ever made with a personal login). Push the tag `furea@0.1.0` and create the GitHub Release by hand or by re-running the action.
 3. On npmjs.com → `furea` → Settings → Trusted Publishers: GitHub Actions, organization `sunwjy`, repository `furea`, workflow `release.yml`, environment `npm-publish`, allow `npm publish`. Equivalent CLI: `npm trust github furea --repo sunwjy/furea --file release.yml --env npm-publish --allow-publish`.
-4. Create the GitHub environment `npm-publish` (Settings → Environments). Restrict deployment branches to `main` for the release job if desired; snapshots need `workflow_dispatch` refs allowed.
+4. Create the GitHub environments `npm-publish` and `cloudflare-ci` (Settings → Environments); `cloudflare-ci` holds `CLOUDFLARE_API_TOKEN` (deploy-token template of ADR 0006, created on the CI account) and `CLOUDFLARE_ACCOUNT_ID`. Restrict deployment branches to `main` for the release job if desired; snapshots need `workflow_dispatch` refs allowed.
 5. Enable "Allow GitHub Actions to create and approve pull requests".
 6. Verify with a snapshot dispatch before the first CI-driven release.
 

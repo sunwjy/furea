@@ -77,6 +77,7 @@ All field names are camelCase; timestamps are ISO 8601 strings in UTC (stats buc
 
 | Method and path | Effect |
 |---|---|
+| `GET /auth/login` | Which door is open: `{"method": "password" \| "access"}`. Unauthenticated, so the admin surface's login page can show the Access screen before any password is typed. Added by [Prototype: admin surface screens beyond the link feed](https://github.com/sunwjy/furea/issues/20). |
 | `POST /auth/login` | Body `{"password"}`. Success `204` + `Set-Cookie` (ADR 0003). Failures: `401 invalid_password`, `429 rate_limited` + `Retry-After`, `403 login_disabled` while Access mode is on. |
 | `POST /auth/logout` | Deletes the session row, clears the cookie. `204`. |
 | `GET /auth/session` | Who the caller is: `{"kind": "session" \| "access" \| "apiKey", "scope": "read" \| "write", "apiKey": {"id", "name"} \| null}`. |
@@ -92,7 +93,7 @@ The rule: **an API key cannot change authentication.** Creating or revoking API 
 
 | Endpoint | no auth | `read` key | `write` key | session |
 |---|---|---|---|---|
-| `POST /auth/login`, `GET /openapi.json` | ok | ok | ok | ok |
+| `GET`/`POST /auth/login`, `GET /openapi.json` | ok | ok | ok | ok |
 | `GET /auth/session` | 401 | ok | ok | ok |
 | `GET /links*`, `GET /stats*`, `GET /settings` | 401 | ok | ok | ok |
 | `POST`/`PATCH`/`DELETE /links*`, `PATCH /settings` (`rootDestination`) | 401 | 403 | ok | ok |

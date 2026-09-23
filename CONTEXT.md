@@ -53,7 +53,7 @@ An optional one-line label the operator gives a link so it can be recognised in 
 _Avoid_: Name, description, note, label
 
 **Disabled link**:
-A link the operator has switched off without deleting it. Visitors get the same response as for an unknown slug; the link keeps its slug, destination and click history.
+A link the operator has switched off without deleting it. Visitors get the same response as for an unknown slug; the link keeps its slug, destination and click history. In the public API this is the link's `enabled` field set to false.
 _Avoid_: Paused, archived, inactive, soft-deleted
 
 **Click**:
@@ -79,6 +79,10 @@ _Avoid_: Click count, hits, total clicks
 **Click breakdown**:
 Any per-period view of clicks (time series, top countries, top referrer hosts, device classes). Breakdowns cover the last 90 days and are estimates.
 _Avoid_: Stats, analytics, report, insights
+
+**Instance overview**:
+The instance-wide view of clicks: totals for today, the last 7 days and the last 30 days, and the links with the most clicks in a chosen range. Like every click breakdown it is a last-90-days estimate.
+_Avoid_: Dashboard, summary, overview stats
 
 **Analytics token**:
 The read-only credential an instance needs to compute click breakdowns. Without it the instance still counts clicks and shows lifetime totals, but no breakdowns.
@@ -123,6 +127,10 @@ _Avoid_: Token, access token, secret, credential
 **Scope**:
 What an API key may do: `read` (list links and read analytics) or `write` (everything). There are no finer scopes.
 _Avoid_: Permission, role, grant
+
+**Settings**:
+The handful of instance-wide values an operator can change from the admin surface or the public API: the root destination and Access mode. Everything the installer provisions (domain, analytics token, version) is not a setting, only visible alongside them.
+_Avoid_: Config, preferences, options
 
 **Access mode**:
 The instance setting under which Cloudflare Access, not the operator password, decides who is the operator. Turning it on hides the password login; API keys keep working.

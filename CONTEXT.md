@@ -117,8 +117,20 @@ The helper in the admin surface's link form that composes UTM parameters into a 
 _Avoid_: UTM generator, URL builder, UTM tool
 
 **Campaign**:
-A named group of links that all send visitors to the same base URL and share one UTM campaign value, differing only in their other UTM parameters (typically source and medium). A link belongs to at most one campaign. The campaign is where its links' clicks are compared and combined.
+A named group of links that all send visitors to the same base URL and share one UTM campaign value, differing only in their other UTM parameters (typically source and medium). A link belongs to at most one campaign. The campaign is where its links' clicks are compared and combined. It owns the shared part of its links' destinations: a campaign link's destination is always made from the campaign plus the link's own UTM parameters, so changing the campaign changes every link in it. A campaign has no enabled state of its own. See ADR 0012.
 _Avoid_: Group, folder, tag, collection, UTM campaign (for the group itself)
+
+**Campaign link**:
+A link that belongs to a campaign. Its destination cannot be edited directly, only its own UTM parameters; no two campaign links in one campaign carry the same UTM parameters, ignoring case.
+_Avoid_: Variant, child link, member URL
+
+**Detach**:
+To take a link out of its campaign. The link becomes a plain link with the same destination and the same click history. Deleting a campaign detaches all its links.
+_Avoid_: Remove from campaign, ungroup, unlink
+
+**Adopt**:
+To put an existing plain link into a campaign. Only possible when the link's destination already matches what the campaign would compose; adopting never changes where a link sends visitors.
+_Avoid_: Import, attach, move into campaign
 
 **Base URL**:
 The destination a campaign's links share before their UTM parameters are added: the "main link" of the campaign.

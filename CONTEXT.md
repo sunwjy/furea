@@ -121,11 +121,11 @@ A structured record the Worker writes about something that went wrong or needs t
 _Avoid_: Request log, access log, invocation log, trace
 
 **UTM parameters**:
-The standard `utm_*` query parameters (source, medium, campaign, content, term) that tell the destination site's own analytics where a visitor came from. furea keeps them only as part of a link's destination; they are never stored or counted separately.
+The standard `utm_*` query parameters (source, medium, campaign, content, term) that tell the destination site's own analytics where a visitor came from. furea keeps them only as part of a link's destination; they are never stored or counted separately. `utm_id` counts as one too; a key written in another case (`UTM_Source`) does not.
 _Avoid_: Tracking parameters, UTM tags, UTM fields
 
 **UTM builder**:
-The helper in the admin surface's link form that composes UTM parameters into a destination and reads them back out of one. It changes nothing about how a link is stored or redirected.
+The helper in the admin surface's link form that composes UTM parameters into a destination and reads them back out of one. It only ever changes the UTM parameters: every other part of the destination stays exactly as entered. It changes nothing about how a link is stored or redirected. See ADR 0014.
 _Avoid_: UTM generator, URL builder, UTM tool
 
 **Campaign**:

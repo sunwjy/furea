@@ -17,7 +17,7 @@ An instance is single-tenant and only the operator (session or API key, ADR 0003
 
 - **Provider**: `https://security.cloudflare-dns.com/dns-query` (1.1.1.1 for Families, malware + phishing), JSON form, `A` query for the destination host. No account, key, secret or setting; always on.
 - **Verdict**: the host is **flagged** when the answer carries `EDE(16)` (Censored) or an `0.0.0.0` answer. NXDOMAIN, no records, and **IP-literal hosts** pass unchecked. Screening is domain-level only; a malicious path on a shared host is invisible.
-- **Which writes**: every write that **sets a destination**: `POST /links`, a `PATCH` that includes `destination`, campaign creation and campaign edits that trigger a campaign-wide rewrite (checked once before the rewrite), bulk creation of campaign links, and setting the **root destination** (ADR 0008). Adopt (ADR 0012) sets nothing and is not checked. A write that repeats the current host is still checked.
+- **Which writes**: every write that **sets a destination**: `POST /links`, a `PATCH` that includes `destination`, campaign creation and campaign edits that trigger a campaign-wide rewrite (checked once before the rewrite), bulk creation of campaign links, and setting the **root destination** (ADR 0008). Adopt (ADR 0012) is not checked: it only re-serialises the UTM pairs (ADR 0014), never the host. A write that repeats the current host is still checked.
 - **Deduplication**: one lookup per distinct host per request, so a campaign's bulk creation costs one subrequest.
 - **Never on the redirect path.** Stored links are not re-checked.
 

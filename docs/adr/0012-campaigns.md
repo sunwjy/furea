@@ -20,7 +20,7 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 
 ## Campaign links
 
-- **Composition invariant**: destination = base URL + UTM campaign (+ `utm_id`) + the link's `utm_source` and `utm_medium` (required) and `utm_content` / `utm_term` (optional). The destination string stays the only stored form; the exact composition (order, encoding, fragment placement) belongs to *Decide: UTM builder composition rules*.
+- **Composition invariant**: destination = base URL + UTM campaign (+ `utm_id`) + the link's `utm_source` and `utm_medium` (required) and `utm_content` / `utm_term` (optional). The destination string stays the only stored form; the exact composition (order, encoding, fragment placement) is ADR 0014.
 - **No drift**: a campaign link's destination cannot be edited directly. Only its own UTM values are editable; to send it elsewhere, detach it first.
 - **UTM values** are trimmed; case is preserved as entered (some organisations use camelCase).
 - **Uniqueness**: within one campaign, the (source, medium, content, term) combination is unique, **compared case-insensitively**, so `Newsletter` and `newsletter` cannot split one channel in the destination site's analytics. The rejection names the existing value it collides with. Outside campaigns, duplicate destinations stay allowed (ADR 0002).
@@ -41,7 +41,7 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 ## Membership
 
 - **Detach** is always allowed: the link becomes a plain link, its destination (still carrying the UTM parameters) and its click history unchanged.
-- **Adopt** of a plain link is allowed only when its destination already equals the campaign's composition for some source/medium (and optional content/term) that is unique in the campaign, and the cap is not reached. Adopting never rewrites a destination; otherwise it is refused with the reason.
+- **Adopt** of a plain link is allowed only when its destination already matches the campaign's composition for some source/medium (and optional content/term) that is unique in the campaign, and the cap is not reached; otherwise it is refused with the reason. The match ignores UTM pair order and encoding, and adopting rewrites the destination to the canonical form (ADR 0014, amended there): adopting never changes where a visitor lands.
 - **Deleting a campaign** detaches all its links; it never deletes or disables them. Deleting links is always a separate, explicit action.
 
 ## Considered options
@@ -51,5 +51,5 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 3. Base URL frozen once links exist. Rejected: landing pages move and typos happen; the per-link sync-pending loop already makes a multi-link write-through safe.
 4. A campaign-level enabled flag. Rejected: it would have to reach the redirect cache entry and blur the meaning of a disabled link; a bulk action covers the need.
 5. Deleting a campaign deletes its links, or is refused while links exist. Rejected: the first makes a grouping action destructive for short URLs already printed or sent; the second is tedious for no safety gain over detaching.
-6. Enforced lowercase UTM values. Rejected: some organisations deliberately use camelCase; case-insensitive uniqueness prevents the split within a campaign, and value suggestions nudge consistency across campaigns.
+6. Enforced lowercase UTM values. Rejected: some organisations deliberately use camelCase; case-insensitive uniqueness prevents the split within a campaign. Across campaigns only the browser's own form autocomplete nudges consistency (ADR 0014 rejected a value-suggestion service).
 7. No cap. Rejected: at 1,000 KV writes per day on the Free plan, a few base-URL edits on a large campaign would exhaust the day's writes for the whole instance; 100 also bounds bulk-creation requests and the slug list in campaign analytics queries.

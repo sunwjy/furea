@@ -38,6 +38,22 @@ The free plan's 100k D1 rows/day is shared by the counter and by operator edits.
 - Day boundaries use the **browser's time zone**, passed as a `tz` query parameter and applied with `toStartOfInterval(timestamp, INTERVAL ..., tz)`. It is a request parameter, not an instance setting. Rejected: UTC-only buckets.
 - No query result caching in v1. One operator cannot reach the free plan's 10k reads/day, and a KV cache would eat the 1,000 KV writes/day budget. Rejected: KV cache (budget), Cache API (unnecessary yet).
 
+## Campaigns
+
+Amended by [Decide: campaign analytics queries](https://github.com/sunwjy/furea/issues/31), building on ADR 0012 and [Research: aggregating Analytics Engine clicks across a set of slugs](https://github.com/sunwjy/furea/issues/30) ([`docs/research/wae-slug-set-aggregation.md`](../research/wae-slug-set-aggregation.md)).
+
+- **Membership is read at query time.** A campaign's clicks are the clicks of the links that belong to it *now*, over their whole history. Adopting a link brings its earlier clicks in; detaching or deleting it takes them all out. Nothing about campaigns is written at click time: the click facts stay four, the cache entry (ADR 0004) is unchanged, and adopt/detach cost no KV write.
+- **Lifetime total**: `SUM(click_count)` over the campaign's current links in D1, computed on every read. No separate campaign counter.
+- **Breakdowns**: the same ranges (24 h, 7 d, 30 d, 90 d), `tz` handling and "last 90 days, estimated" labelling as a link. The Worker reads the member slugs and their `created_at` from D1 and writes them into the SQL as one bound per link, `(index1 = ? AND timestamp >= ?) OR ...`, AND-ed with the range. At most 100 links (ADR 0012) keeps this to a few kilobytes; the SQL API documents no length limit, so a smoke test confirms a 100-link query is accepted.
+- **Four queries per campaign page**, never one per link:
+  1. `GROUP BY index1, bucket`: from it the Worker derives each link's series (sparkline) and range total and the combined series.
+  2. to 4. combined top 10 countries, top 10 referrer hosts and the device-class breakdown over all member links (not per link).
+  Every query also selects `count()`; v1 does not expose it.
+- **Campaign comparison**: one row per link (slug, its UTM values, range clicks, lifetime total, sparkline), including links with no clicks and disabled links (marked). The admin surface can fold the rows into one per source or per medium, grouping case-insensitively, from the rows it already has: no extra query. Folding reads the links' **current** UTM values, so a link whose source was edited counts entirely under the new source. Content/term folding and a source × medium matrix are not offered.
+- **Not in the instance overview.** Campaigns get no tile and no "top campaigns" list; the campaign list shows link count and lifetime total from D1 only and runs no Analytics Engine query.
+- **Without the analytics token** the campaign page keeps the combined lifetime total and the comparison on lifetime totals (source/medium folding included) and hides ranges, series, top lists and sparklines with the usual hint.
+- Rejected: writing a campaign id into each click (as a blob, as the index, or into a second dataset). WAE rows cannot be rewritten, so membership would be frozen at click time, the cache entry would need the id, and adopt/detach would each cost a KV write; an index per campaign would also undo per-slug sampling. Rejected: one query per link (Workers Free allows 50 subrequests per request), a D1 campaign counter (it would disagree with the members' totals after any detach), and top campaigns in the overview (one query per campaign).
+
 ## Analytics read token
 
 Reading WAE needs an API token with `Account Analytics Read`. It is a **separate, read-only token** stored as the Worker secret `ANALYTICS_TOKEN`; the installer's deploy token (Workers Scripts Edit and friends) is never placed inside the Worker. When the secret is missing the admin surface **degrades**: it shows D1 totals and hides the WAE panels with a hint. How the installer obtains the token is decided in *Decide: installer UX flow and upgrade behaviour*.

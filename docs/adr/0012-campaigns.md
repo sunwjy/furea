@@ -40,7 +40,7 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 
 ## Membership
 
-- **Detach** is always allowed: the link becomes a plain link, its destination (still carrying the UTM parameters) and its click history unchanged.
+- **Detach** is always allowed: the link becomes a plain link, its destination (still carrying the UTM parameters) and its click history unchanged. The campaign view reads membership at query time, so a detached link's clicks leave the campaign and an adopted link's earlier clicks join it (ADR 0005, section *Campaigns*).
 - **Adopt** of a plain link is allowed only when its destination already matches the campaign's composition for some source/medium (and optional content/term) that is unique in the campaign, and the cap is not reached; otherwise it is refused with the reason. The match ignores UTM pair order and encoding, and adopting rewrites the destination to the canonical form (ADR 0014, amended there): adopting never changes where a visitor lands.
 - **Deleting a campaign** detaches all its links; it never deletes or disables them. Deleting links is always a separate, explicit action.
 

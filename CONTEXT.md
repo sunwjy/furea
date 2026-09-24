@@ -85,7 +85,7 @@ The hostname of the page a click came from, or `direct` when there was none. Nev
 _Avoid_: Referrer, source, origin
 
 **Lifetime total**:
-The exact number of clicks a link has received since it was created. It is never estimated and never expires.
+The exact number of clicks a link has received since it was created. It is never estimated and never expires. A campaign's lifetime total is the sum of its current links' lifetime totals.
 _Avoid_: Click count, hits, total clicks
 
 **Click breakdown**:
@@ -95,6 +95,14 @@ _Avoid_: Stats, analytics, report, insights
 **Instance overview**:
 The instance-wide view of clicks: totals for today, the last 7 days and the last 30 days, and the links with the most clicks in a chosen range. Like every click breakdown it is a last-90-days estimate.
 _Avoid_: Dashboard, summary, overview stats
+
+**Campaign view**:
+The clicks of a campaign's current links taken together: a combined lifetime total, combined click breakdowns and a campaign comparison. A link's whole history always counts under the campaign it belongs to now, so adopting brings its past clicks in and detaching or deleting it takes them out. Campaigns do not appear in the instance overview.
+_Avoid_: Campaign dashboard, campaign report, campaign stats
+
+**Campaign comparison**:
+The side-by-side view of a campaign's links, one row per link, which can be folded into one row per source or per medium (ignoring case). It reads the links' current UTM parameters.
+_Avoid_: Leaderboard, A/B test, variant report
 
 **Analytics token**:
 The read-only credential an instance needs to compute click breakdowns. Without it the instance still counts clicks and shows lifetime totals, but no breakdowns.

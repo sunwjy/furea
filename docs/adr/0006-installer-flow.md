@@ -14,7 +14,7 @@ Decided in [Decide: installer UX flow and upgrade behaviour](https://github.com/
 | Command | Purpose |
 |---|---|
 | `deploy` (default) | Install or upgrade an instance. First run asks for the hostname choice and prints the operator password once; later runs ask nothing. |
-| `status` | Report the deployed version, hostname, resource ids, the number of sync-pending links and any drift (missing binding, Cron Trigger or domain, observability settings). Non-zero exit when something is wrong. |
+| `status` | Report the deployed version, hostname, resource ids, the number of sync-pending links and any drift (missing binding, Cron Trigger or domain, observability settings), plus the update check below. Non-zero exit when something is wrong; a newer release is never "wrong". |
 | `logs` | Stream live Worker events through Cloudflare's tail API (`--errors`, `--json`); headers and IP-derived fields are never printed (ADR 0011). |
 | `login` / `logout` | Add or remove a deploy token in the local credentials file. |
 | `domain set <hostname>` / `domain unset` | Attach or detach a Workers Custom Domain after install. |
@@ -59,6 +59,30 @@ Because step 4 runs before step 6, the **previous Worker version keeps serving o
 There is no rollback and no `--dry-run`. Every step looks resources up by name and re-declares configuration, so **re-running `deploy` resumes wherever the last run stopped**: created resources are reused, applied migrations are skipped, an expired asset session is reopened, Cron and domain are re-asserted. `status` is the pre-flight check.
 
 Custom-domain problems (zone not in the account, hostname already used by a DNS record or another Worker) **stop the run** with the cause; nothing is overridden. The CLI then offers, once and only interactively, to open the instance on workers.dev for now, so the operator can fix DNS and run `domain set` later.
+
+## Update check
+
+Decided in [Decide: should furea status check for a newer release](https://github.com/sunwjy/furea/issues/26).
+
+Three versions are compared: the deployed `FUREA_VERSION` (**D**), the installer's own version (**I**) and the `latest` dist-tag on the registry (**L**). D against I is local and always runs. L is fetched once, only by `status` and at the end of `deploy`, from `GET <registry>/-/package/furea/dist-tags` with a 2-second timeout and no auth header; `<registry>` is `npm_config_registry` when set (so a mirror answers for itself), else `https://registry.npmjs.org`. A failed or skipped lookup prints nothing and falls back to I as "newest known".
+
+`status` prints one line, always exit 0 for this part:
+
+| Situation | Line |
+|---|---|
+| D older than newest known, within one `minor` (0.x) | `Update available: D → N. Run: npx furea@latest deploy` |
+| D older than newest known, across a 0.x `minor` (ADR 0010: operator must know before upgrading) | `Read the release notes before upgrading:` + GitHub Releases link covering D..N, then the command |
+| D is a snapshot (ADR 0010) | `Snapshot deployed (D); replace it with a release: npx furea@latest deploy` |
+| I older than D (deploy would hit the version gate) | `This installer (I) is older than the instance (D). Use npx furea@latest.` |
+| D is newest known | `Up to date.` |
+
+At the end of `deploy`, when I is older than L, one line says a newer release than the one just deployed exists (the stale-npx-cache and pinned-CI case). No changelog text is shipped in the package; the hint only links to GitHub Releases.
+
+Opt-out: `--no-update-check` or `FUREA_NO_UPDATE_CHECK=1` skips the registry lookup only; D-versus-I stays on. CI is **not** detected and skipped automatically, because a pinned installer in CI is exactly where stale releases keep getting deployed.
+
+The **instance never asks the registry**: neither the Worker (on request or from the Cron Trigger) nor the admin surface's browser code calls npm. The admin surface shows the version from `GET /settings` with a static "upgrade with `npx furea@latest deploy`" hint. The instance contacts no external service the operator did not configure, and upgrading happens only from the operator's machine anyway.
+
+Rejected: a background check on every command (`update-notifier` style), which needs a cache file beyond the local credentials and adds network calls to `destroy` or `reset-password`; a `latestVersion` field on `GET /settings` or a Cron lookup in the Worker; a registry fetch from the admin surface's browser code.
 
 ## Worker knows its origin from the request
 

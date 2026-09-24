@@ -164,6 +164,10 @@ _Avoid_: Config file, project config, state file
 The installer's view of what the instance is doing right now, streamed while the operator watches and stored nowhere. It shows each request's outcome and path, never who sent it.
 _Avoid_: Logs (for stored Worker logs), tail worker, log stream
 
+**Update check**:
+The installer's comparison of the instance's deployed version with its own version and with the newest release, ending in one hint for the operator. It never blocks anything and the instance itself never takes part in it.
+_Avoid_: Version check (for the deploy version gate), auto-update, update notifier
+
 **Package**:
 The one thing published to npm under the name `furea`: the installer together with everything an instance needs (the Worker bundle, the admin assets and the migrations) at one version. There is nothing else to install.
 _Avoid_: CLI package, distribution, release artifact

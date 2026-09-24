@@ -7,6 +7,7 @@ export type Link = {
   syncPending: boolean;
   clickCount: number; // lifetime total (exact, D1)
   createdAt: string;
+  campaign?: string; // ticket #33: seed campaign id
 };
 export type Range = '24h' | '7d' | '30d' | '90d';
 export type Breakdown = {
@@ -47,6 +48,17 @@ const seed: Omit<Link, 'clickCount' | 'syncPending'>[] = [
   { slug: 'hiring', destination: 'https://jobs.example.com/positions/backend-engineer', title: 'Hiring page', disabled: false, createdAt: daysAgo(3) },
   { slug: 'z9TrEe', destination: 'https://maps.app.goo.gl/abcdef123456', title: 'Office map', disabled: false, createdAt: daysAgo(1) },
   { slug: 'deck', destination: 'https://slides.example.com/d/furea-v1-plan', title: 'v1 planning deck', disabled: false, createdAt: daysAgo(0.2) },
+  // ---- ticket #33: two campaigns, plus a plain link that could be adopted into "Spring sale 2026" ----
+  { campaign: 'cmp_spring', slug: 'spring-nl', destination: 'https://shop.example.com/spring?ref=furea&utm_source=newsletter&utm_medium=email&utm_campaign=spring_sale_2026#deals', title: null, disabled: false, createdAt: daysAgo(20) },
+  { campaign: 'cmp_spring', slug: 'Ts8kWq', destination: 'https://shop.example.com/spring?ref=furea&utm_source=instagram&utm_medium=social&utm_campaign=spring_sale_2026&utm_content=story#deals', title: null, disabled: false, createdAt: daysAgo(20) },
+  { campaign: 'cmp_spring', slug: 'Hb3mZr', destination: 'https://shop.example.com/spring?ref=furea&utm_source=instagram&utm_medium=social&utm_campaign=spring_sale_2026&utm_content=post#deals', title: null, disabled: false, createdAt: daysAgo(20) },
+  { campaign: 'cmp_spring', slug: 'fb-spring', destination: 'https://shop.example.com/spring?ref=furea&utm_source=facebook&utm_medium=cpc&utm_campaign=spring_sale_2026#deals', title: 'FB ads', disabled: false, createdAt: daysAgo(18) },
+  { campaign: 'cmp_spring', slug: 'Np4cXe', destination: 'https://shop.example.com/spring?ref=furea&utm_source=naver&utm_medium=cpc&utm_campaign=spring_sale_2026#deals', title: null, disabled: false, createdAt: daysAgo(12) },
+  { campaign: 'cmp_spring', slug: 'Kk9aYv', destination: 'https://shop.example.com/spring?ref=furea&utm_source=kakao&utm_medium=message&utm_campaign=spring_sale_2026#deals', title: null, disabled: true, createdAt: daysAgo(9) },
+  { slug: 'spring-sms', destination: 'https://shop.example.com/spring?ref=furea&utm_medium=sms&utm_source=twilio&utm_campaign=spring_sale_2026#deals', title: 'made by another tool', disabled: false, createdAt: daysAgo(7) },
+  { campaign: 'cmp_webinar', slug: 'web-li', destination: 'https://events.example.com/webinar/october?utm_id=wb10&utm_source=linkedin&utm_medium=social&utm_campaign=webinar-oct', title: null, disabled: false, createdAt: daysAgo(5) },
+  { campaign: 'cmp_webinar', slug: 'Rq7uPd', destination: 'https://events.example.com/webinar/october?utm_id=wb10&utm_source=newsletter&utm_medium=email&utm_campaign=webinar-oct', title: null, disabled: false, createdAt: daysAgo(5) },
+  { campaign: 'cmp_webinar', slug: 'Gz2wLm', destination: 'https://events.example.com/webinar/october?utm_id=wb10&utm_source=acme&utm_medium=referral&utm_campaign=webinar-oct&utm_content=partner-banner', title: 'Acme partner', disabled: false, createdAt: daysAgo(2) },
 ];
 
 export const links: Link[] = seed.map((l, i) => {

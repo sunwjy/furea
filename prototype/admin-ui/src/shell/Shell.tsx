@@ -9,10 +9,12 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'reac
 import { api, ApiError, type Session, type Settings } from './v1api';
 import { Feed, LinkPage, NewLink } from './Links';
 import { ApiKeysPage, SecurityPage, SettingsPage } from './Admin';
+import { AddLinks, CampaignList, CampaignPage, NewCampaign } from './Campaigns';
 import { ScenarioPanel } from './ScenarioPanel';
 import './shell.css';
 
-export type Variant = 'E' | 'F';
+// G/H/I (ticket #33) are F plus campaign screens; see Campaigns.tsx
+export type Variant = 'E' | 'F' | 'G' | 'H' | 'I';
 type Ctx = { variant: Variant; session: Session; settings: Settings; reloadSettings: () => Promise<void>; host: string };
 const ShellCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useShell = () => useContext(ShellCtx);
@@ -67,6 +69,7 @@ function Authed({ variant }: { variant: Variant }) {
         <nav className="s-nav">
           <b>furea</b>
           <NavLink to={to('/')} end>Links</NavLink>
+          {(variant === 'G' || variant === 'I') && <NavLink to={to('/campaigns')}>Campaigns</NavLink>}
           {variant === 'E' ? <NavLink to={to('/keys')}>API keys</NavLink> : <NavLink to={to('/security')}>Security</NavLink>}
           <NavLink to={to('/settings')}>Settings</NavLink>
           <span className="s-who">
@@ -79,6 +82,10 @@ function Authed({ variant }: { variant: Variant }) {
           <Route path="/new" element={<NewLink />} />
           <Route path="/links/:slug" element={<LinkPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          {variant !== 'H' && <Route path="/campaigns" element={<CampaignList />} />}
+          <Route path="/campaigns/new" element={<NewCampaign />} />
+          <Route path="/campaigns/:id" element={<CampaignPage />} />
+          {variant === 'G' && <Route path="/campaigns/:id/add" element={<AddLinks />} />}
           {variant === 'E' ? <Route path="/keys" element={<ApiKeysPage />} /> : <Route path="/security" element={<SecurityPage />} />}
           <Route path="*" element={<Navigate to={to('/')} replace />} />
         </Routes>

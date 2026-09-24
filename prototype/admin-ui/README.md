@@ -1,6 +1,7 @@
 # PROTOTYPE — furea admin UI variants
 
-Throwaway. Variants E/F answer wayfinder ticket [#20](https://github.com/sunwjy/furea/issues/20); A–D answered
+Throwaway. Variants G/H/I answer wayfinder ticket [#33](https://github.com/sunwjy/furea/issues/33) (UTM builder and
+campaign screens); variants E/F answer wayfinder ticket [#20](https://github.com/sunwjy/furea/issues/20); A–D answered
 ticket [#11](https://github.com/sunwjy/furea/issues/11):
 what the link list looks like, how a link is created and edited, what per-link stats show,
 and whether SPA-on-Static-Assets feels right versus server-rendered HTML.
@@ -8,8 +9,33 @@ and whether SPA-on-Static-Assets feels right versus server-rendered HTML.
 ```sh
 cd prototype/admin-ui
 pnpm install
-pnpm dev          # opens http://localhost:5173/admin/?variant=E  (mock password: furea-proto)
+pnpm dev          # opens http://localhost:5173/admin/?variant=G  (mock password: furea-proto)
 ```
+
+## Ticket #33: variants G/H/I (campaigns + UTM builder, on top of the F shell)
+
+All three share the **UTM builder exactly as ADR 0014 settled it** (`src/shell/Builder.tsx`, parse/compose in
+`src/shell/utm.ts`, the same functions the mock server uses): a collapsed "UTM parameters" section in the plain-link form
+and link Edit, auto-open when the destination has a lowercase `utm_*`, two-way sync, warnings for missing
+source/medium/campaign, `UTM_Source`, duplicates, malformed `%`; campaign links always open with the campaign's fields and
+destination read-only. They also share the campaign header (Edit → rewrite confirmation naming the link count and the
+new-`utm_campaign` warning, Enable all / Disable all, Delete = detach), combined tiles/breakdowns, detach and
+"Add to campaign…" (adopt, with the refusal reason) on a link's page, and the ADR 0013 refusal
+(`422 destination_flagged` → "Create anyway" / "Save anyway"). Any host containing `malware` or `phish` is flagged by the mock.
+
+They disagree on the open questions:
+
+| | G: nav page + row editor | H: grouped in the feed + matrix | I: source × medium pivot |
+| --- | --- | --- | --- |
+| Where campaigns live | `Campaigns` nav item → list table | no nav item; one grouped card per campaign in the Links feed | `Campaigns` nav item → list table |
+| Campaign detail | links table (source/medium/content/term, range bar), by link / source / medium toggle | compact rows with sparklines + matrix generator inline | pivot: sources × mediums, each cell holds its link(s) with clicks, Σ per row/column, side panel |
+| Bulk creation | `/campaigns/:id/add`: rows (source, medium, content, term, custom slug), paste from a spreadsheet, per-row errors | tick source × medium combinations (+ one shared content), generated slugs only | tick empty cells, add rows/columns, "+ content" per filled cell |
+| Campaign link from `/admin/new` | no (hint points to the campaign page) | "Campaign links" tab = the matrix generator | "Campaign" picker: one campaign link through the read-only builder |
+| Membership in the feed | purple campaign badge on each card | the group card (expand to see links) | badge + "Campaign" filter select |
+
+Seed: *Spring sale 2026* (6 links, one disabled), *October webinar* (3 links, `utm_id`), and `/spring-sms`, a plain link
+whose UTM pairs are in another order (adoptable into Spring sale; adopting canonicalises it). The campaign endpoints under
+`/api/v1/campaigns` are a guess for the mock only; ticket #32 decides the real API, #31 the real analytics queries.
 
 ## Ticket #20 — variants E/F (against the ADR 0009 mock under `/api/v1`)
 

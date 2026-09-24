@@ -5,7 +5,7 @@
   "description": "PROTOTYPE - throwaway admin UI variants for furea (wayfinder ticket #11). Not production code.",
   "type": "module",
   "scripts": {
-    "dev": "vite --open /admin/?variant=E"
+    "dev": "vite --open /admin/?variant=G"
   },
   "dependencies": {
     "hono": "^4.6.0",

@@ -15,7 +15,11 @@ export function PrototypeSwitcher({ current }: { current: string }) {
     const p = new URLSearchParams(params);
     p.set('variant', next.key);
     // E <-> F keep the current page unless it only exists in one of them
-    const shell = ['E', 'F'].includes(current) && ['E', 'F'].includes(next.key) && !/^\/(keys|security)/.test(pathname);
+    // shell variants keep the current page unless it only exists in some of them
+    const SHELL = ['E', 'F', 'G', 'H', 'I'];
+    const campaignOnly = /^\/campaigns/.test(pathname) && !['G', 'H', 'I'].includes(next.key);
+    const shell = SHELL.includes(current) && SHELL.includes(next.key) && !/^\/(keys|security)/.test(pathname) && !campaignOnly
+      && !(pathname === '/campaigns' && next.key === 'H') && !(/\/add$/.test(pathname) && next.key !== 'G');
     navigate({ pathname: shell ? pathname : '/', search: `?${p}` }, { replace: true });
   };
   useEffect(() => {

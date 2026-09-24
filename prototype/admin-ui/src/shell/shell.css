@@ -46,3 +46,44 @@
 .proto-scenario-btns { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .proto-scenario-btns button { font-size: 11px; padding: 2px 6px; }
 .proto-scenario-body pre { max-height: 200px; overflow: auto; font-size: 10px; background: #000; color: #9f9; padding: 6px; margin: 0; }
+
+/* ---- ticket #33: UTM builder + campaigns (variants G/H/I) ---- */
+.badge.cmp { background: #f4ebff; color: #6941c6; text-decoration: none; margin-left: 4px; }
+.u-box { border: 1px solid var(--line); border-radius: var(--radius); margin: 10px 0; padding: 0 10px; background: #fafbfc; }
+.u-box.open { padding-bottom: 10px; }
+.u-toggle { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 0; font-weight: 600; font-size: 13px; }
+.u-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.u-grid code { font-size: 11px; }
+input.ro { background: #f2f4f7; color: var(--muted); }
+.u-preview { font: 12px ui-monospace, Menlo, monospace; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; overflow-wrap: anywhere; }
+.u-preview mark { background: #e8f1ff; color: #1d4ed8; }
+.s-dl .u-preview { border: 0; padding: 0; background: transparent; }
+.u-warn { background: #fffaeb; border: 1px solid #fedf89; color: #7a2e0e; border-radius: var(--radius); padding: 6px 8px; margin-top: 6px; font-size: 12px; }
+.u-flag { background: #fef3f2; border: 1px solid #fecdca; color: #912018; border-radius: var(--radius); padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+.u-flag ul { margin: 4px 0; padding-left: 18px; }
+.u-h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 20px 0 8px; }
+.u-trunc { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.u-off { opacity: .55; }
+.u-bar { display: inline-block; width: 120px; height: 6px; background: #eef0f3; border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.u-bar i { display: block; height: 100%; background: var(--accent); }
+.u-rows input { width: 100%; padding: 4px 6px; }
+.u-rows td { padding: 4px; }
+.u-rowerr td { background: #fef3f2; }
+.u-group { border-left: 4px solid #9e77ed; }
+.u-line { display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin: 4px 0; font-size: 13px; }
+.u-line button { padding: 2px 8px; font-size: 12px; }
+.u-matrix { border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+.u-matrix th, .u-matrix td { border: 1px solid var(--line); padding: 6px 10px; text-align: center; }
+.u-matrix th button { padding: 0 4px; }
+.u-pivot-wrap { display: flex; gap: 16px; align-items: flex-start; }
+.u-pivot { border-collapse: collapse; width: 100%; background: var(--panel); font-size: 12px; }
+.u-pivot th, .u-pivot td { border: 1px solid var(--line); padding: 6px; vertical-align: top; }
+.u-pivot thead th { text-align: left; }
+.u-pivot tbody th { text-align: left; white-space: nowrap; }
+.u-tot { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.u-chip { display: block; width: 100%; text-align: left; border: 1px solid transparent; padding: 4px 6px; margin-bottom: 3px; font-size: 12px; }
+.u-chip.on { border-color: var(--accent); }
+.u-empty { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0; color: var(--muted); font-size: 14px; cursor: pointer; }
+.u-empty input { width: auto; }
+.u-addc { font-size: 11px; padding: 0 4px; color: var(--muted); }
+.u-side { width: 300px; flex: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; position: sticky; top: 12px; font-size: 13px; }

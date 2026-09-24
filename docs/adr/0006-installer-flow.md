@@ -14,7 +14,8 @@ Decided in [Decide: installer UX flow and upgrade behaviour](https://github.com/
 | Command | Purpose |
 |---|---|
 | `deploy` (default) | Install or upgrade an instance. First run asks for the hostname choice and prints the operator password once; later runs ask nothing. |
-| `status` | Report the deployed version, hostname, resource ids and any drift (missing binding, Cron Trigger or domain). Non-zero exit when something is wrong. |
+| `status` | Report the deployed version, hostname, resource ids, the number of sync-pending links and any drift (missing binding, Cron Trigger or domain, observability settings). Non-zero exit when something is wrong. |
+| `logs` | Stream live Worker events through Cloudflare's tail API (`--errors`, `--json`); headers and IP-derived fields are never printed (ADR 0011). |
 | `login` / `logout` | Add or remove a deploy token in the local credentials file. |
 | `domain set <hostname>` / `domain unset` | Attach or detach a Workers Custom Domain after install. |
 | `analytics-token` | Create or replace the read-only analytics token stored as the `ANALYTICS_TOKEN` Worker secret. |
@@ -41,7 +42,7 @@ The pre-filled token template grants **Workers Scripts Edit, Workers KV Storage 
 3. **Version gate**: if the deployed version is newer than the package, stop unless `--allow-downgrade` is given.
 4. **Apply pending D1 migrations** (wrangler-compatible `d1_migrations` table, one `/query` request per file so DDL and bookkeeping commit together).
 5. Upload the admin SPA assets (wrangler-compatible hashes; re-open the session on JWT expiry).
-6. `PUT` the script with the full declarative binding set (`DB`, `KV`, `ASSETS`, `CLICKS`, the two `ratelimit` limiters, `FUREA_VERSION`) and `keep_bindings: ["secret_text"]` so `ANALYTICS_TOKEN` survives without being resent.
+6. `PUT` the script with the full declarative binding set (`DB`, `KV`, `ASSETS`, `CLICKS`, the two `ratelimit` limiters, `FUREA_VERSION`) and `keep_bindings: ["secret_text"]` so `ANALYTICS_TOKEN` survives without being resent. The same metadata always carries the explicit `observability` object of ADR 0011.
 7. Register the Cron Trigger `*/5 * * * *`.
 8. Hostname: on first install ask **own domain or workers.dev**; afterwards reuse whatever is attached. Own domain: find the zone by trimming labels of the hostname, then `PUT /workers/domains`; when attached, the workers.dev route is **disabled**. workers.dev: if the account has no subdomain, ask for one (`--workers-subdomain`) rather than inventing it, since the name is account-wide.
 9. First install only: generate the operator password, store its hash in D1, print it once.

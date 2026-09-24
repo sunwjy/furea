@@ -46,6 +46,8 @@ Reading WAE needs an API token with `Account Analytics Read`. It is a **separate
 
 The function that records a click never sees the `Request`. The redirect path builds a small value object with exactly `slug`, `country`, `referrerHost`, `deviceClass`; only the function that builds it reads request headers, and a unit test pins its output to those four fields. Nothing is derived from the IP address, not even a salted hash, so **unique visitors are not offered** in v1: any such count would be IP-derived and break the promise.
 
+The guarantee also covers **Cloudflare-side storage that furea configures**. `deploy` keeps Workers Logs' invocation logs off (they would persist request headers, including the client IP, and `cf` location data for days), and the Worker's own log lines never contain a request header, an IP address or anything derived from either. A setting the operator changes in the Cloudflare dashboard is reverted on the next `deploy`. See ADR 0011.
+
 ## Considered and rejected
 
 - **D1 daily roll-up table** (exact, permanent history) as an opt-in: out of v1. It doubles the per-click D1 writes and needs a dashboard that merges two stores. The v1 promise is deliberately simple: exact and permanent totals, estimated 90-day breakdowns.

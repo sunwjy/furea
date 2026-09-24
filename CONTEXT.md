@@ -104,6 +104,10 @@ _Avoid_: Dirty, stale, unsynced, failed
 The one fixed answer a visitor receives for any path that resolves to no link: a slug that does not exist, a disabled link, or a malformed path. It is never recorded anywhere and never counts as a click. See ADR 0008 for its form.
 _Avoid_: 404 page, not found, error page
 
+**Worker log**:
+A structured record the Worker writes about something that went wrong or needs the operator's attention (an unhandled error, a link becoming sync pending, a repair pass). Kept by Cloudflare for a few days; it never describes a successful redirect and never holds anything about the visitor.
+_Avoid_: Request log, access log, invocation log, trace
+
 **Root destination**:
 An optional URL the operator sets so that visitors of the instance's bare hostname are redirected there. It follows the same rules as a link's destination, but it is not a link: a redirect to it is never a click. Without it, the root answers with the unknown-slug response.
 _Avoid_: Home URL, fallback URL, default redirect, landing page
@@ -155,6 +159,10 @@ _Avoid_: API token, Cloudflare token, credentials
 **Local credentials**:
 The one file on the operator's machine that holds deploy tokens, one per Cloudflare account. It is the installer's only local state; everything about an instance is read back from Cloudflare.
 _Avoid_: Config file, project config, state file
+
+**Live tail**:
+The installer's view of what the instance is doing right now, streamed while the operator watches and stored nowhere. It shows each request's outcome and path, never who sent it.
+_Avoid_: Logs (for stored Worker logs), tail worker, log stream
 
 **Package**:
 The one thing published to npm under the name `furea`: the installer together with everything an instance needs (the Worker bundle, the admin assets and the migrations) at one version. There is nothing else to install.

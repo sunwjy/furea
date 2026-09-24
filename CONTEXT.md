@@ -108,6 +108,26 @@ _Avoid_: 404 page, not found, error page
 A structured record the Worker writes about something that went wrong or needs the operator's attention (an unhandled error, a link becoming sync pending, a repair pass). Kept by Cloudflare for a few days; it never describes a successful redirect and never holds anything about the visitor.
 _Avoid_: Request log, access log, invocation log, trace
 
+**UTM parameters**:
+The standard `utm_*` query parameters (source, medium, campaign, content, term) that tell the destination site's own analytics where a visitor came from. furea keeps them only as part of a link's destination; they are never stored or counted separately.
+_Avoid_: Tracking parameters, UTM tags, UTM fields
+
+**UTM builder**:
+The helper in the admin surface's link form that composes UTM parameters into a destination and reads them back out of one. It changes nothing about how a link is stored or redirected.
+_Avoid_: UTM generator, URL builder, UTM tool
+
+**Campaign**:
+A named group of links that all send visitors to the same base URL and share one UTM campaign value, differing only in their other UTM parameters (typically source and medium). A link belongs to at most one campaign. The campaign is where its links' clicks are compared and combined.
+_Avoid_: Group, folder, tag, collection, UTM campaign (for the group itself)
+
+**Base URL**:
+The destination a campaign's links share before their UTM parameters are added: the "main link" of the campaign.
+_Avoid_: Main link, landing URL, root URL, long URL
+
+**UTM campaign**:
+The value of the `utm_campaign` parameter. Every link in a campaign carries the campaign's one UTM campaign value; outside a campaign it is just part of a destination.
+_Avoid_: Campaign (for the parameter value), campaign name
+
 **Root destination**:
 An optional URL the operator sets so that visitors of the instance's bare hostname are redirected there. It follows the same rules as a link's destination, but it is not a link: a redirect to it is never a click. Without it, the root answers with the unknown-slug response.
 _Avoid_: Home URL, fallback URL, default redirect, landing page

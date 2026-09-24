@@ -48,6 +48,18 @@ _Avoid_: Vanity slug, alias
 The absolute `http` or `https` URL a link redirects to. Must not point back at the instance itself.
 _Avoid_: Target, long URL, original URL, redirect URL
 
+**Screening**:
+The check a destination's host goes through, against Cloudflare's family-safe resolver, whenever a write sets a destination. Domain-level only; never on the redirect path and never repeated for stored links.
+_Avoid_: Scanning, safe browsing, validation (validation is the syntax rules)
+
+**Flagged destination**:
+A destination whose host screening reports as malware or phishing. Refused unless the operator overrides it.
+_Avoid_: Blocked link, malicious link, unsafe URL
+
+**Screening override**:
+The operator's explicit choice, from a session only, to save a flagged destination anyway. Not remembered on the link.
+_Avoid_: Allowlist, bypass, force
+
 **Title**:
 An optional one-line label the operator gives a link so it can be recognised in the admin surface. Never shown to visitors.
 _Avoid_: Name, description, note, label

@@ -107,7 +107,8 @@ The rule: **an API key cannot change authentication.** Creating or revoking API 
 - Titles are trimmed, at most 200 characters; an empty title is stored as `null`.
 - Every error is `{"error": {"code": "<snake_case>", "message": "<English, human-readable>", "details"?: [...]}}` with the HTTP status carrying the class. Rejected: RFC 9457 Problem Details, whose `type` URIs and media type add ceremony that a shell script reading `.error.code` does not need.
 - Validation errors are `400 validation_failed` with `details: [{"field", "code", "message"}]`, one entry per failing field, so a request with a reserved slug **and** a self-referencing destination reports both. Field codes: `slug_invalid`, `slug_reserved`, `slug_immutable`, `destination_invalid`, `destination_self`, `title_too_long`, `unknown_field`, `read_only_field`, plus range/tz codes for stats.
-- Top-level codes: `validation_failed` 400, `invalid_json` 400, `cursor_invalid` 400, `unauthorized` 401, `invalid_password` 401, `forbidden` 403, `login_disabled` 403, `not_found` 404, `slug_taken` 409, `access_requires_own_domain` 409, `access_unreachable` 409, `unsupported_media_type` 415, `rate_limited` 429, `internal` 500, `analytics_unavailable` 503.
+- Top-level codes: `validation_failed` 400, `invalid_json` 400, `cursor_invalid` 400, `unauthorized` 401, `invalid_password` 401, `forbidden` 403, `login_disabled` 403, `not_found` 404, `slug_taken` 409, `access_requires_own_domain` 409, `access_unreachable` 409, `unsupported_media_type` 415, `destination_flagged` 422, `rate_limited` 429, `internal` 500, `analytics_unavailable` 503.
+- Destination screening (ADR 0013): any write that sets a destination (links, root destination, campaigns) may answer `422 destination_flagged` with `details: [{"field", "host"}]`; a body field `"screening": "skip"` overrides the verdict and is accepted from a session only (`403 forbidden` from an API key).
 
 ## Cross-origin
 
@@ -118,4 +119,4 @@ The API sends **no CORS headers**. The admin surface is same-origin, and scripts
 - `packages/shared` owns the zod schemas for every request and response above, and the OpenAPI document is derived from them, so the schemas are the contract for the Worker, the admin surface and the published docs alike.
 - D1 gains a `settings` row for `root_destination` (ADR 0008) next to the existing auth settings, and `api_keys` gains an `id` column.
 - The admin surface's remaining screens (login, API keys, settings, degraded analytics layout) can now be designed against a fixed contract.
-- Link-creation rate limiting, if added, slots in as `429 rate_limited` on `POST /links` without changing any shape.
+- Link-creation rate limiting, if added, slots in as `429 rate_limited` on `POST /links` without changing any shape (ADR 0013 decided not to add it in v1).

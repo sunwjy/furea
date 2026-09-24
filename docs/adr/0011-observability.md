@@ -39,6 +39,8 @@ The redirect path logs **nothing** when it succeeds. Everything else is one stru
 | `redirect_fallback_failed` | The D1 fallback on a redirect-cache miss fails | slug |
 | `click_write_failed` | The WAE data point or the D1 `click_count` increment fails | slug, store (`wae` or `d1`) |
 | `login_rate_limited` | A login attempt is refused by a rate limiter (ADR 0003) | limiter (`per_client` or `global`) |
+| `screening_overridden` | A session saved a flagged destination with `"screening": "skip"` (ADR 0013) | slug (or `_` for the root destination) |
+| `screening_unavailable` | The screening lookup failed and the write proceeded (ADR 0013) | slug when known |
 
 Field rules: a **slug may appear** (it is the operator's own data and not visitor-derived). A **destination never appears**, because it may carry secrets in its query. **No request header, IP address or value derived from either** ever appears. Failed logins that are not rate-limited are not logged.
 

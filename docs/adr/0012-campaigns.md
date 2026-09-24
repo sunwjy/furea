@@ -35,7 +35,7 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 
 ## Bulk operations
 
-- **Bulk creation** of links inside a campaign is **all-or-nothing** in D1: every item is validated first (slug rules, custom-slug collisions, combination uniqueness, the 100-link cap), and if any fails nothing is created and each failure is reported per item. Cache write-through then runs per link as usual.
+- **Bulk creation** of links inside a campaign is **all-or-nothing** in D1: every item is validated first (slug rules, custom-slug collisions, combination uniqueness, the 100-link cap), and if any fails nothing is created and each failure is reported per item. Cache write-through then runs per link as usual. Destination screening (ADR 0013) is part of that validation: one lookup per distinct host, and a flagged host refuses the whole request unless a session overrides it; a campaign-wide rewrite is screened once before it runs.
 - **Disable all / enable all** is a bulk action that sets `enabled` on every member link; it is not a campaign state, and the cache entry shape of ADR 0004 is unchanged.
 
 ## Membership

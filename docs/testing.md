@@ -9,7 +9,7 @@ Five tiers, named so that CI jobs, package scripts and this page use the same wo
 | Tier | What it proves | Tooling | Runs on PR | Runs on `main` push | Runs in the release job |
 |---|---|---|---|---|---|
 | **Static** | The code builds and conforms: oxlint, `tsc`, esbuild/Vite builds, tarball check, migration/changeset consistency (`docs/release.md`). | turbo, `scripts/check-tarball.mjs` | yes | yes | yes |
-| **Unit** | Each package behaves, in isolation, against real platform primitives where it has them. | vitest (`shared`, `cli`), `@cloudflare/vitest-pool-workers` (`worker`) | yes | yes | yes |
+| **Unit** | Each package behaves, in isolation, against real platform primitives where it has them. | vitest (`shared`, `cli`), `@cloudflare/vitest-plugin` (`worker`) | yes | yes | yes |
 | **E2E** | The admin surface and the Worker work together in a browser. | Playwright (chromium) against `wrangler dev` | yes | yes | yes |
 | **Compat** | New migrations leave the previous release's Worker working (ADR 0006). | `scripts/check-expand-only.mjs`, miniflare, `npm pack furea@latest` | only when `apps/worker/migrations/` changed | only when `apps/worker/migrations/` changed | yes |
 | **Integration** | The installer really installs and upgrades an instance on a real Cloudflare account. | `packages/cli` against the CI account | no (secrets are not available to fork PRs) | yes, failure does not block anything | yes, **hard gate before publish** |
@@ -46,7 +46,7 @@ Node environment, no bindings. `shared` is TypeScript source with Web Crypto onl
 
 ## `apps/worker` — everything in the Workers pool
 
-All Worker tests run under `@cloudflare/vitest-pool-workers` with the dev-only `wrangler.jsonc`, so they see a real local D1, KV, the assets binding and the `ratelimit` limiters (miniflare). **Mocking D1 or KV is not allowed**; a test that wants a particular database state creates it through `core/db/` or with SQL.
+All Worker tests run under `@cloudflare/vitest-plugin` with the dev-only `wrangler.jsonc`, so they see a real local D1, KV, the assets binding and the `ratelimit` limiters (miniflare). **Mocking D1 or KV is not allowed**; a test that wants a particular database state creates it through `core/db/` or with SQL.
 
 - **Setup** applies the real migration files with the pool's `applyD1Migrations` helper, so every migration is executed on every test run.
 - **`core/db/`** functions are tested directly against the `DB` binding: one file per table module, covering the row types and each query (including the `cache_synced` repair queries of ADR 0004).

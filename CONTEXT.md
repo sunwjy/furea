@@ -194,7 +194,7 @@ _Avoid_: SSO mode, Zero Trust mode, enterprise mode
 
 **Installer**:
 The command-line tool (`npx furea`) an operator runs on their own machine to create, upgrade, inspect or remove an instance. It talks to Cloudflare directly; nothing of it runs inside the instance.
-_Avoid_: CLI (when the instance's own API is meant), wrangler, deployer
+_Avoid_: CLI (when the instance's own API is meant), wrangler, cf, deployer
 
 **Deploy**:
 One run of the installer that brings an instance up to the installer's own version: the same action installs a new instance and upgrades an existing one. Re-running it is always safe.

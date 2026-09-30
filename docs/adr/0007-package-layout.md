@@ -50,11 +50,11 @@ furea/
 
 ## Plain D1, hand-written migrations
 
-The Worker uses `D1Database` (`prepare().bind().first<T>()` and friends) through a thin repository module in `apps/worker/src/core/db/` that holds one row type and the query functions per table. Both `redirect/` and `api/` go through it. Those functions are tested against a real D1 with `@cloudflare/vitest-pool-workers`.
+The Worker uses `D1Database` (`prepare().bind().first<T>()` and friends) through a thin repository module in `apps/worker/src/core/db/` that holds one row type and the query functions per table. Both `redirect/` and `api/` go through it. Those functions are tested against a real D1 with `@cloudflare/vitest-plugin` (formerly `@cloudflare/vitest-pool-workers`, ADR 0015).
 
 Migrations live in `apps/worker/migrations/` and are written by hand:
 
-- File name `NNNN_short-name.sql`, four digits zero-padded, starting at `0001`. The numeric prefix is what wrangler's migration commands sort by, so a user who later runs `wrangler d1 migrations list --remote` on the same database sees the same history (ADR 0006 keeps the `d1_migrations` table wrangler-compatible).
+- File name `NNNN_short-name.sql`, four digits zero-padded, starting at `0001`. The numeric prefix is what wrangler's migration commands sort by, so a user who later runs `wrangler d1 migrations list --remote` on the same database sees the same history, as does `cf d1 migrations list <database id>` (ADR 0006 and ADR 0015 keep the `d1_migrations` table wrangler-compatible).
 - One file per release that changes the schema, under 100 KB (the D1 statement limit), preferring re-runnable statements (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`).
 - The first line is a comment stating that the file is compatible with the previous release's Worker (expand-only, ADR 0006).
 - A published migration file is never edited; corrections are new files.
@@ -63,7 +63,7 @@ Migrations live in `apps/worker/migrations/` and are written by hand:
 
 ## Development
 
-wrangler is a devDependency of `apps/worker` only, used for `wrangler dev`, `wrangler d1 migrations apply --local` and the vitest pool. `apps/worker/wrangler.jsonc` is development configuration and never enters the published package; the installer does not use wrangler (ADR 0006).
+wrangler is a devDependency of `apps/worker` only, used for `wrangler dev`, `wrangler d1 migrations apply --local` and by `@cloudflare/vitest-plugin` (wrangler-config mode). Moving development to the `cf` CLI waits until `cf` is GA or wrangler's final major ships (ADR 0015). `apps/worker/wrangler.jsonc` is development configuration and never enters the published package; the installer does not use wrangler (ADR 0006).
 
 ## Considered options
 

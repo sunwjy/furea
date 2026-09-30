@@ -35,13 +35,15 @@ Every prompt has a flag or environment-variable equivalent (`--account`, `--host
 
 The pre-filled token template grants **Workers Scripts Edit, Workers KV Storage Edit, D1 Edit, Zone Read and DNS Edit** (all zones). Zone and DNS permissions are included up front so the own-domain path, which is the primary path, never sends the operator back to the dashboard for a second token. The analytics token (`Account Analytics Read`) stays a separate credential (ADR 0005) and is never placed in the deploy token.
 
+The deploy token is the installer's **only** credential: pasted into `login` (or the first `deploy`) from the template URL, or supplied as `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`. No wrangler or `cf` session is ever borrowed (ADR 0015).
+
 ## `deploy` step order
 
 1. Load the token, verify it, resolve the account.
 2. Find or create the D1 database and KV namespace by instance name. Fetch the current script, if any, and read `FUREA_VERSION`.
 3. **Version gate**: if the deployed version is newer than the package, stop unless `--allow-downgrade` is given.
-4. **Apply pending D1 migrations** (wrangler-compatible `d1_migrations` table, one `/query` request per file so DDL and bookkeeping commit together).
-5. Upload the admin SPA assets (wrangler-compatible hashes; re-open the session on JWT expiry).
+4. **Apply pending D1 migrations** (`d1_migrations` table compatible with wrangler and `cf`, ADR 0015; one `/query` request per file so DDL and bookkeeping commit together).
+5. Upload the admin SPA assets (asset hashes compatible with wrangler and `cf`; re-open the session on JWT expiry).
 6. `PUT` the script with the full declarative binding set (`DB`, `KV`, `ASSETS`, `CLICKS`, the two `ratelimit` limiters, `FUREA_VERSION`) and `keep_bindings: ["secret_text"]` so `ANALYTICS_TOKEN` survives without being resent. The same metadata always carries the explicit `observability` object of ADR 0011.
 7. Register the Cron Trigger `*/5 * * * *`.
 8. Hostname: on first install ask **own domain or workers.dev**; afterwards reuse whatever is attached. Own domain: find the zone by trimming labels of the hostname, then `PUT /workers/domains`; when attached, the workers.dev route is **disabled**. workers.dev: if the account has no subdomain, ask for one (`--workers-subdomain`) rather than inventing it, since the name is account-wide.

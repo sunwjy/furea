@@ -5,9 +5,9 @@ date: 2026-09-24
 
 # A campaign owns its links' destinations: they are always composed, never drift, and are rewritten together
 
-A **campaign** is a first-class entity that owns the shared part of its links' destinations (base URL, UTM campaign, optional `utm_id`). A campaign link's destination is always the composition of that shared part and the link's own UTM parameters; it is never edited as free text, so editing the campaign rewrites every member link. Membership changes never move a visitor silently: detaching keeps the destination, adopting is only allowed when the destination already matches. A campaign holds at most **100 links**, because every campaign-wide rewrite spends one Workers KV write per link out of the Free plan's 1,000 per day.
+A **campaign** is a first-class entity that owns the shared part of its links' destinations (base URL, UTM campaign, optional `utm_id`). A campaign link's destination is always the composition of that shared part and the link's own UTM parameters; it is never edited as free text, so editing the campaign rewrites every member link. Membership changes never move a visitor silently: detaching keeps the destination, adopting is only allowed when the destination already matches. A campaign holds at most **50 links**, because every campaign-wide rewrite spends one Workers KV write per link out of the Free plan's 1,000 per day, and campaign analytics name every member slug in one Analytics Engine SQL query, which may not exceed 10,000 characters (ADR 0005).
 
-Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunwjy/furea/issues/28), building on ADR 0002 (slug rules), ADR 0004 (redirect cache) and the campaign scope extension on the map.
+Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunwjy/furea/issues/28), building on ADR 0002 (slug rules), ADR 0004 (redirect cache) and the campaign scope extension on the map. Cap lowered from 100 to 50 by [Decide: keeping campaign queries under the Analytics Engine 10,000-character SQL limit](https://github.com/sunwjy/furea/issues/37).
 
 ## Campaign
 
@@ -35,7 +35,7 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 
 ## Bulk operations
 
-- **Bulk creation** of links inside a campaign is **all-or-nothing** in D1: every item is validated first (slug rules, custom-slug collisions, combination uniqueness, the 100-link cap), and if any fails nothing is created and each failure is reported per item. Cache write-through then runs per link as usual. Destination screening (ADR 0013) is part of that validation: one lookup per distinct host, and a flagged host refuses the whole request unless a session overrides it; a campaign-wide rewrite is screened once before it runs.
+- **Bulk creation** of links inside a campaign is **all-or-nothing** in D1: every item is validated first (slug rules, custom-slug collisions, combination uniqueness, the 50-link cap), and if any fails nothing is created and each failure is reported per item. Cache write-through then runs per link as usual. Destination screening (ADR 0013) is part of that validation: one lookup per distinct host, and a flagged host refuses the whole request unless a session overrides it; a campaign-wide rewrite is screened once before it runs.
 - **Disable all / enable all** is a bulk action that sets `enabled` on every member link; it is not a campaign state, and the cache entry shape of ADR 0004 is unchanged.
 
 ## Membership
@@ -52,4 +52,5 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 4. A campaign-level enabled flag. Rejected: it would have to reach the redirect cache entry and blur the meaning of a disabled link; a bulk action covers the need.
 5. Deleting a campaign deletes its links, or is refused while links exist. Rejected: the first makes a grouping action destructive for short URLs already printed or sent; the second is tedious for no safety gain over detaching.
 6. Enforced lowercase UTM values. Rejected: some organisations deliberately use camelCase; case-insensitive uniqueness prevents the split within a campaign. Across campaigns only the browser's own form autocomplete nudges consistency (ADR 0014 rejected a value-suggestion service).
-7. No cap. Rejected: at 1,000 KV writes per day on the Free plan, a few base-URL edits on a large campaign would exhaust the day's writes for the whole instance; 100 also bounds bulk-creation requests and the slug list in campaign analytics queries.
+7. No cap. Rejected: at 1,000 KV writes per day on the Free plan, a few base-URL edits on a large campaign would exhaust the day's writes for the whole instance; the cap also bounds bulk-creation requests and the slug list in campaign analytics queries.
+8. A cap of 100 (the original choice), kept by splitting a campaign query into several when its SQL exceeds 10,000 characters, or by dropping the per-link `created_at` bound. Rejected: 100 links with 64-character custom slugs need about 13,000 characters per query ([Task: smoke-test a 100-link campaign query against the Analytics Engine SQL API](https://github.com/sunwjy/furea/issues/34)); splitting means merging top-10 lists across chunks, and dropping the bound lets a reused slug inherit a deleted link's clicks. At 50, the worst case (50 × 64-character slugs, each with its own bound) is about 6,650 characters, so the query keeps one shape and leaves room for longer `tz` names or added conditions. A value close to the limit (about 70) was rejected for the same lack of margin.

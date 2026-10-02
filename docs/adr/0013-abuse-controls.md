@@ -52,5 +52,5 @@ The docs carry an "Abuse and operator responsibility" section: only the operator
 
 - ADR 0009 gains the top-level code `destination_flagged` 422 and the `screening` request field (amended there); ADR 0011 gains the `screening_overridden` and `screening_unavailable` events (amended there); ADR 0012's bulk creation and rewrites run screening (amended there).
 - The campaign API (still open) and the campaign/UTM admin prototype must carry the refusal and the session-only override.
-- One DoH subrequest per distinct host per destination write; within the Free plan's 50 subrequests even for a 100-link bulk creation.
+- One DoH subrequest per distinct host per destination write; within the Free plan's 50 subrequests even for a 50-link bulk creation (the ADR 0012 cap).
 - A `screening` module in `apps/worker` owns the lookup and verdict, with the DoH `fetch` injected so unit tests never reach the network.

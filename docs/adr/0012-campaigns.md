@@ -11,7 +11,7 @@ Decided in [Decide: campaign domain model and lifecycle](https://github.com/sunw
 
 ## Campaign
 
-- Identified by a generated opaque **id**, never by its name (the API addresses `/campaigns/:id`; exact shape belongs to the public-API decision).
+- Identified by a generated opaque **id**, never by its name (the API addresses `/campaigns/:id`; resource and endpoints in ADR 0009, section *Campaigns*).
 - **Name**: editable, unique across the instance compared case-insensitively.
 - **UTM campaign**: a separate field, defaulted from the name when the campaign is created, editable. Not required to be unique; a value already used by another campaign is a warning, not an error.
 - **`utm_id`**: optional, owned by the campaign, shared by every member link, same edit rules as the UTM campaign.

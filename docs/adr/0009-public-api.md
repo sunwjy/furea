@@ -29,10 +29,14 @@ All field names are camelCase; timestamps are ISO 8601 strings in UTC (stats buc
   "enabled": true,
   "clickCount": 1234,
   "cacheSynced": true,
+  "campaign": null,
+  "utm": null,
   "createdAt": "2026-09-23T04:12:09Z",
   "updatedAt": "2026-09-23T04:12:09Z"
 }
 ```
+
+- `campaign` and `utm` were added by the campaign amendment (see *Campaigns* below): both are `null` on a plain link, even when its destination carries UTM parameters.
 
 - `shortUrl` is computed from the request's `Host`, so an instance reachable on both `workers.dev` and its own domain returns whichever hostname the caller used.
 - `title` is `null` when unset. `clickCount` is the exact lifetime total (ADR 0005). `cacheSynced: false` is the *sync pending* state (ADR 0004), never an error.
@@ -65,6 +69,90 @@ All field names are camelCase; timestamps are ISO 8601 strings in UTC (stats buc
 - Numbers are last-90-days estimates (`sum(_sample_interval)`); the OpenAPI descriptions say so, and no per-response `estimated` flag is sent.
 - **Unavailable**: when the `ANALYTICS_TOKEN` secret is missing, both endpoints answer `503 analytics_unavailable`. The settings resource exposes `analyticsConfigured` so the admin surface can hide the panels without provoking the error. Rejected: `200` with `available: false`, which scripts would mistake for empty data.
 
+### Campaigns
+
+Added by [Decide: public API for campaigns and UTM](https://github.com/sunwjy/furea/issues/32), building on ADR 0005 (section *Campaigns*), ADR 0012 (campaigns), ADR 0013 (screening) and ADR 0014 (UTM composition). Everything here is additive within v1.
+
+#### Campaign resource
+
+```json
+{
+  "id": "k3Xq9vTzPa2W",
+  "name": "Spring launch",
+  "utmCampaign": "Spring launch",
+  "utmId": null,
+  "baseUrl": "https://example.com/spring",
+  "linkCount": 12,
+  "enabledLinkCount": 11,
+  "clickCount": 4821,
+  "syncPendingLinkCount": 0,
+  "createdAt": "2026-09-24T02:00:00Z",
+  "updatedAt": "2026-09-24T02:00:00Z"
+}
+```
+
+- `id` is a random 12-character string from the slug alphabet, like an API key id.
+- `linkCount`, `enabledLinkCount`, `clickCount` (sum of the members' exact lifetime totals) and `syncPendingLinkCount` are computed from D1 on every read, never stored (ADR 0005 rejected a campaign counter), and are read-only (`read_only_field`). They are what the admin surface's campaign list shows without further calls.
+- `utmCampaign` omitted on create defaults to the trimmed `name`, case kept (ADR 0012); no slugifying. A UTM campaign already used by another campaign is allowed and not reported by the API; the admin surface checks with `GET /campaigns?q=`.
+- A campaign link's Link resource carries `"campaign": {"id", "name"}` and `"utm": {"source", "medium", "content", "term"}` (`content`/`term` may be `null`): the link's own UTM parameters. The campaign's shared values are on the campaign.
+
+#### Endpoints
+
+| Method and path | Effect | Success |
+|---|---|---|
+| `POST /campaigns` | Create. Body `{name, baseUrl, utmCampaign?, utmId?, screening?}`. | `201` + Campaign |
+| `GET /campaigns` | List, `createdAt desc, id desc`, cursor-paginated exactly like `/links` (`limit` 50, max 200); `q` matches name and UTM campaign. | `200` + page |
+| `GET /campaigns/:id` | Read one. | `200` + Campaign |
+| `PATCH /campaigns/:id` | Merge-patch `name`, `baseUrl`, `utmCampaign`, `utmId`, `screening?`. A change to any of the last three rewrites every member link (ADR 0012). | `200` + Campaign + `"rewrittenLinkCount"` |
+| `DELETE /campaigns/:id` | Delete; detaches every member, never deletes or disables links. | `204` |
+| `GET /campaigns/:id/links` | All members as Link resources, unpaginated (at most 50), `createdAt asc, slug asc`. | `200` + `{"items"}` |
+| `POST /campaigns/:id/links` | Bulk creation, all-or-nothing. Body `{"items": [{"utm": {source, medium, content?, term?}, "slug"?, "title"?}], "screening"?}`; also the only way to create a single campaign link. | `201` + `{"items": [Link]}` |
+| `PATCH /campaigns/:id/links` | Disable all / enable all: body `{"enabled": bool}`, sets `enabled` on every member (no campaign state). | `200` + `{"updated": n}` |
+| `GET /campaigns/:id/stats` | The campaign view's breakdowns (below). | `200` |
+
+- `POST /links` stays plain-only; it has no `campaign` or `utm` field.
+- `PATCH /campaigns/:id` takes no "expected link count" guard: the admin surface confirms the count it shows, and a link added meanwhile is rewritten correctly anyway.
+- `PATCH /campaigns/:id/links` is a merge-patch applied to each member; `enabled` is its only field in v1. Chosen over action routes (`/disable-all`) for the same reason enable/disable is a field on a link.
+
+#### Membership through `PATCH /links/:slug`
+
+- `{"utm": {...}}` edits a campaign link's own UTM parameters (merge-patch inside `utm`; `source`/`medium` cannot be set to `null`); the Worker recomposes the destination with the shared ADR 0014 functions. Not screened: the host is the campaign's.
+- `{"campaign": null}` **detaches**. `{"campaign": {"id": "…"}}` **adopts** a plain link; the Worker reads the UTM parameters out of its destination and rewrites it to the canonical form (ADR 0014). `campaign.name` is read-only.
+- A link already in another campaign cannot be moved in one step: detach first (`409 campaign_member`). A direct move would combine two changes whose partial failure is hard to explain, and a destination rarely matches a second campaign.
+- `destination` on a campaign link is refused (`destination_campaign_owned`); `utm` on a plain link is refused (`utm_requires_campaign`).
+- Rejected: action routes such as `POST /campaigns/:id/adopt` and `DELETE /campaigns/:id/links/:slug` for detach. A link stays addressed by its slug alone, and a `DELETE` that does not delete the link would invite exactly the wrong mistake.
+
+#### Campaign stats
+
+`GET /campaigns/:id/stats?range=7d&tz=…` runs the four queries of ADR 0005 (section *Campaigns*):
+
+```json
+{
+  "range": "7d", "tz": "Asia/Seoul",
+  "series": [{"start", "clicks"}],
+  "countries": [...], "referrerHosts": [...], "deviceClasses": [...],
+  "bySlug": {"<slug>": {"clicks": 120, "series": [{"start", "clicks"}]}}
+}
+```
+
+- `series` and the three top lists are combined over all current members, shaped like `/links/:slug/stats`. `bySlug` holds **every** current member, zero-filled, so the campaign comparison's rows are complete from one response (unlike `/stats`'s `seriesBySlug`, which holds only slugs with clicks).
+- The comparison's UTM values, lifetime totals and enabled flags come from `GET /campaigns/:id/links`; the client joins the two by slug and folds by source or medium itself. Analytics Engine data and D1 data are never mixed in one response.
+- Without the analytics token it answers `503 analytics_unavailable` like the other stats resources; the D1 responses alone still give the lifetime comparison.
+
+#### Campaign errors
+
+- **Bulk creation** reports every failing item in one `400 validation_failed`, conflicts included, because the request is one unit: `{"field": "items[2].slug", "code": "slug_taken"}`, `{"field": "items[4].utm", "code": "utm_combination_taken", "conflictsWith": {"slug": "Ab3xYz"}}` (or `{"item": 1}` for a collision inside the request), the message naming the colliding value as stored. Single writes keep their own classes (`409 slug_taken` on `POST /links`, `409 utm_combination_taken` on `PATCH /links/:slug`).
+- **Cap**: creating or adopting past the 50-link cap (ADR 0012) is `409 campaign_link_limit`, a request-level code.
+- **Campaign edit too long**: a rewrite that would push any member past 2048 characters is `400 validation_failed` with one `{"field": "baseUrl", "code": "rewrite_too_long", "slug"}` entry per offending link (ADR 0014); nothing is written.
+- **Adopt refused**: `409 adopt_mismatch`; the message is the human-readable reason and `details` carries one reason code: `base_url_mismatch`, `utm_campaign_mismatch`, `utm_id_mismatch`, `utm_missing`, `duplicate_utm_key`, `utm_combination_taken`.
+- **Screening** (ADR 0013): campaign creation and rewriting edits are screened; a bulk creation's items all share the base URL's host, so a flagged request's `details` is the single `{"field": "baseUrl", "host"}`.
+- Field codes added: `base_url_has_utm`, `destination_campaign_owned`, `utm_requires_campaign`, `utm_combination_taken`, `rewrite_too_long`. Top-level codes added: `campaign_name_taken` 409, `campaign_member` 409, `campaign_link_limit` 409, `adopt_mismatch` 409, `utm_combination_taken` 409.
+
+#### Not added
+
+- No `?campaign=` filter on `GET /links` and no campaign name in its `q` (`GET /campaigns/:id/links` covers it; both stay addable within v1). `/stats` is unchanged and counts campaign links like any other link; campaigns are not in the instance overview (ADR 0005).
+- No endpoint for UTM parsing, composition or previously used values (ADR 0014).
+
 ### Settings
 
 - `GET /settings` and `PATCH /settings` on one document: `{"rootDestination": "https://…" | null, "access": {"teamDomain", "aud"} | null, "analyticsConfigured": true | false, "version": "1.2.3"}`.
@@ -95,9 +183,11 @@ The rule: **an API key cannot change authentication.** Creating or revoking API 
 |---|---|---|---|---|
 | `GET`/`POST /auth/login`, `GET /openapi.json` | ok | ok | ok | ok |
 | `GET /auth/session` | 401 | ok | ok | ok |
-| `GET /links*`, `GET /stats*`, `GET /settings` | 401 | ok | ok | ok |
-| `POST`/`PATCH`/`DELETE /links*`, `PATCH /settings` (`rootDestination`) | 401 | 403 | ok | ok |
+| `GET /links*`, `GET /campaigns*`, `GET /stats*`, `GET /settings` | 401 | ok | ok | ok |
+| `POST`/`PATCH`/`DELETE /links*` and `/campaigns*`, `PATCH /settings` (`rootDestination`) | 401 | 403 | ok | ok |
 | `PATCH /settings` (`access`), `/api-keys*`, `POST /password`, `POST /auth/logout` | 401 | 403 | 403 | ok |
+
+Campaign deletion and disable-all stay at `write`: the rule concerns authentication, a disable-all does no more than a script disabling links one by one, and deleting a campaign only detaches.
 
 `403` carries `code: "forbidden"` and a message naming the missing scope or "session required". Cookie-authenticated mutating requests must pass the `Origin` check from ADR 0003.
 
@@ -106,8 +196,8 @@ The rule: **an API key cannot change authentication.** Creating or revoking API 
 - Bodies are JSON only: any other `Content-Type` is `415 unsupported_media_type`; malformed JSON is `400 invalid_json`; bodies over 64 KiB are `413`.
 - Titles are trimmed, at most 200 characters; an empty title is stored as `null`.
 - Every error is `{"error": {"code": "<snake_case>", "message": "<English, human-readable>", "details"?: [...]}}` with the HTTP status carrying the class. Rejected: RFC 9457 Problem Details, whose `type` URIs and media type add ceremony that a shell script reading `.error.code` does not need.
-- Validation errors are `400 validation_failed` with `details: [{"field", "code", "message"}]`, one entry per failing field, so a request with a reserved slug **and** a self-referencing destination reports both. Field codes: `slug_invalid`, `slug_reserved`, `slug_immutable`, `destination_invalid`, `destination_self`, `title_too_long`, `unknown_field`, `read_only_field`, plus range/tz codes for stats.
-- Top-level codes: `validation_failed` 400, `invalid_json` 400, `cursor_invalid` 400, `unauthorized` 401, `invalid_password` 401, `forbidden` 403, `login_disabled` 403, `not_found` 404, `slug_taken` 409, `access_requires_own_domain` 409, `access_unreachable` 409, `unsupported_media_type` 415, `destination_flagged` 422, `rate_limited` 429, `internal` 500, `analytics_unavailable` 503.
+- Validation errors are `400 validation_failed` with `details: [{"field", "code", "message"}]`, one entry per failing field, so a request with a reserved slug **and** a self-referencing destination reports both. Field codes: `slug_invalid`, `slug_reserved`, `slug_immutable`, `destination_invalid`, `destination_self`, `title_too_long`, `unknown_field`, `read_only_field`, plus range/tz codes for stats and the campaign field codes listed under *Campaigns*.
+- Top-level codes: `validation_failed` 400, `invalid_json` 400, `cursor_invalid` 400, `unauthorized` 401, `invalid_password` 401, `forbidden` 403, `login_disabled` 403, `not_found` 404, `slug_taken` 409, `campaign_name_taken` 409, `campaign_member` 409, `campaign_link_limit` 409, `adopt_mismatch` 409, `utm_combination_taken` 409, `access_requires_own_domain` 409, `access_unreachable` 409, `unsupported_media_type` 415, `destination_flagged` 422, `rate_limited` 429, `internal` 500, `analytics_unavailable` 503.
 - Destination screening (ADR 0013): any write that sets a destination (links, root destination, campaigns) may answer `422 destination_flagged` with `details: [{"field", "host"}]`; a body field `"screening": "skip"` overrides the verdict and is accepted from a session only (`403 forbidden` from an API key).
 
 ## Cross-origin
@@ -119,4 +209,5 @@ The API sends **no CORS headers**. The admin surface is same-origin, and scripts
 - `packages/shared` owns the zod schemas for every request and response above, and the OpenAPI document is derived from them, so the schemas are the contract for the Worker, the admin surface and the published docs alike.
 - D1 gains a `settings` row for `root_destination` (ADR 0008) next to the existing auth settings, and `api_keys` gains an `id` column.
 - The admin surface's remaining screens (login, API keys, settings, degraded analytics layout) can now be designed against a fixed contract.
+- A campaign link's `utm` is parsed from its stored destination with the ADR 0014 functions, so the destination stays the only stored form of UTM parameters; the OpenAPI snapshot grows by the Link fields `campaign` and `utm`, the nine `/campaigns*` operations and the codes above, all additive.
 - Link-creation rate limiting, if added, slots in as `429 rate_limited` on `POST /links` without changing any shape (ADR 0013 decided not to add it in v1).

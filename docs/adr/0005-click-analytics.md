@@ -56,7 +56,7 @@ Amended by [Decide: campaign analytics queries](https://github.com/sunwjy/furea/
 
 ## Analytics read token
 
-Reading WAE needs an API token with `Account Analytics Read`. It is a **separate, read-only token** stored as the Worker secret `ANALYTICS_TOKEN`; the installer's deploy token (Workers Scripts Edit and friends) is never placed inside the Worker. When the secret is missing the admin surface **degrades**: it shows D1 totals and hides the WAE panels with a hint. How the installer obtains the token is decided in *Decide: installer UX flow and upgrade behaviour*.
+Reading WAE needs an API token with `Account Analytics Read`. It is a **separate, read-only token** stored as the Worker secret `ANALYTICS_TOKEN`; the installer's deploy token (Workers Scripts Edit and friends) is never placed inside the Worker. When the secret is missing, or the script has no `CLICKS` binding because the account refuses Analytics Engine (ADR 0006, *Analytics Engine is optional*), the admin surface **degrades**: it shows D1 totals and hides the WAE panels with a hint naming which of the two is missing. Without the binding the redirect path skips the data point and still counts the click in D1. How the installer obtains the token is decided in *Decide: installer UX flow and upgrade behaviour*.
 
 ## The no-IP guarantee
 

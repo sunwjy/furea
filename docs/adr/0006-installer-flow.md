@@ -14,7 +14,7 @@ Decided in [Decide: installer UX flow and upgrade behaviour](https://github.com/
 | Command | Purpose |
 |---|---|
 | `deploy` (default) | Install or upgrade an instance. First run asks for the hostname choice and prints the operator password once; later runs ask nothing. |
-| `status` | Report the deployed version, hostname, resource ids, the number of sync-pending links and any drift (missing binding, Cron Trigger or domain, observability settings), plus the update check below. Non-zero exit when something is wrong; a newer release is never "wrong". |
+| `status` | Report the deployed version, hostname, resource ids, the number of sync-pending links and any drift (missing binding, Cron Trigger or domain, observability settings), plus the update check below. Non-zero exit when something is wrong; a newer release is never "wrong", and neither is a missing `CLICKS` binding (see *Analytics Engine is optional*), which is reported as information. |
 | `logs` | Stream live Worker events through Cloudflare's tail API (`--errors`, `--json`); headers and IP-derived fields are never printed (ADR 0011). |
 | `login` / `logout` | Add or remove a deploy token in the local credentials file. |
 | `domain set <hostname>` / `domain unset` | Attach or detach a Workers Custom Domain after install. |
@@ -37,6 +37,14 @@ The pre-filled token template grants **Workers Scripts Edit, Workers KV Storage 
 
 The deploy token is the installer's **only** credential: pasted into `login` (or the first `deploy`) from the template URL, or supplied as `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`. No wrangler or `cf` session is ever borrowed (ADR 0015).
 
+### User tokens and account-owned tokens
+
+Decided in [Decide: installer handling of a missing Analytics Engine entitlement and account-owned tokens](https://github.com/sunwjy/furea/issues/38).
+
+- The template URL opens the **user-token** form (`/profile/api-tokens?...`) by default; `login --account-token` (and `analytics-token --account-token`) opens the account-owned form (`/?to=/:account/api-tokens&...`) instead. Account-owned tokens can only be created by a Super Administrator, so the default must work for any member who holds the permissions. The docs recommend an account-owned token for CI, where surviving staff turnover matters.
+- `login`, `deploy` (step 1) and `analytics-token` accept **both kinds**. The account is resolved first (`--account` / `CLOUDFLARE_ACCOUNT_ID`, else `GET /accounts`, which answers for both kinds), then the token is verified on the endpoint its prefix suggests: `/accounts/<id>/tokens/verify` for `cfat_…`, `/user/tokens/verify` otherwise. A `401` there is retried once on the other endpoint, so a future prefix change does not lock anyone out. No code path calls `/user` or `/memberships`.
+- Rejected: defaulting to the account-owned form (blocks non-Super-Administrators on the primary path), and choosing the endpoint by prefix alone (the prefix is a documented convention, not a contract).
+
 ## `deploy` step order
 
 1. Load the token, verify it, resolve the account.
@@ -44,17 +52,33 @@ The deploy token is the installer's **only** credential: pasted into `login` (or
 3. **Version gate**: if the deployed version is newer than the package, stop unless `--allow-downgrade` is given.
 4. **Apply pending D1 migrations** (`d1_migrations` table compatible with wrangler and `cf`, ADR 0015; one `/query` request per file so DDL and bookkeeping commit together).
 5. Upload the admin SPA assets (asset hashes compatible with wrangler and `cf`; re-open the session on JWT expiry).
-6. `PUT` the script with the full declarative binding set (`DB`, `KV`, `ASSETS`, `CLICKS`, the two `ratelimit` limiters, `FUREA_VERSION`) and `keep_bindings: ["secret_text"]` so `ANALYTICS_TOKEN` survives without being resent. The same metadata always carries the explicit `observability` object of ADR 0011.
+6. `PUT` the script with the full declarative binding set (`DB`, `KV`, `ASSETS`, `CLICKS`, the two `ratelimit` limiters, `FUREA_VERSION`) and `keep_bindings: ["secret_text"]` so `ANALYTICS_TOKEN` survives without being resent. The same metadata always carries the explicit `observability` object of ADR 0011. If the upload is refused only because Analytics Engine is not enabled on the account, it is repeated once without `CLICKS` (see *Analytics Engine is optional*).
 7. Register the Cron Trigger `*/5 * * * *`.
 8. Hostname: on first install ask **own domain or workers.dev**; afterwards reuse whatever is attached. Own domain: find the zone by trimming labels of the hostname, then `PUT /workers/domains`; when attached, the workers.dev route is **disabled**. workers.dev: if the account has no subdomain, ask for one (`--workers-subdomain`) rather than inventing it, since the name is account-wide.
 9. First install only: generate the operator password, store its hash in D1, print it once.
-10. Offer to set the analytics token now (opens the read-only template URL) or skip; `analytics-token` does the same later.
+10. Offer to set the analytics token now (opens the read-only template URL) or skip; `analytics-token` does the same later. When `CLICKS` was left out in step 6, the offer is replaced by the Analytics Engine hint.
 
 Each step prints one line of `create` / `reuse` / `skip`, so a re-run shows what it reused.
 
 ## Migrations are applied before the code and must be expand-only
 
 Because step 4 runs before step 6, the **previous Worker version keeps serving on the new schema** until the upload lands, and a failed migration leaves the old code untouched. The rule this imposes on contributors: every migration must be compatible with the previous release's Worker. Adding tables, columns with defaults and indexes is fine; dropping or renaming a column takes two releases (stop using it, then drop it). Rejected: uploading first, which would run new code on an old schema and push the compatibility burden into runtime checks.
+
+## Analytics Engine is optional
+
+Decided in [Decide: installer handling of a missing Analytics Engine entitlement and account-owned tokens](https://github.com/sunwjy/furea/issues/38).
+
+Some accounts, Workers Free among them, refuse any upload that carries an `analytics_engine` binding with `403` / code `10089` ("You need to enable Analytics Engine"), and no API call or dashboard toggle fixes it ([cloudflare/workers-sdk#9312](https://github.com/cloudflare/workers-sdk/issues/9312), observed in [#34](https://github.com/sunwjy/furea/issues/34)). Analytics Engine only feeds click breakdowns; redirects, links, campaigns and lifetime totals live in D1 and KV. So it must never block an install:
+
+- Step 6 always tries the full binding set first. On `10089`, and only on that code, it repeats the `PUT` once without `CLICKS`, prints `analytics  skip  Analytics Engine is not enabled on this account: <docs link>`, and the run continues and succeeds. Every other refusal still stops the run.
+- Every later `deploy` tries `CLICKS` again, so the binding appears on the first run after the account is fixed; nothing is remembered locally.
+- No preflight. On a first install a refused upload leaves only an empty D1 database and KV namespace, which the retry (or a re-run) reuses; on an upgrade the account already accepted `CLICKS`. A throwaway probe script would cost every `deploy` two requests and could be left behind in the operator's account.
+- The docs link points at a furea docs page, not at Cloudflare's Analytics Engine page (visiting it does not help). The page carries the workaround that worked in #34: add an Analytics Engine binding to any Worker in the dashboard and deploy it there, delete that Worker if wanted, run `npx furea deploy` again; plus the upstream issue. The CLI prints only the link, so the steps can change without a release.
+- `status` reports a missing `CLICKS` binding as information with the same link, never as drift.
+- `analytics-token` still stores the secret when `CLICKS` is missing, with a one-line warning that breakdowns stay empty until the binding is added.
+- The Worker treats `CLICKS` as optional (`env.CLICKS?.writeDataPoint(...)`); the admin surface's degraded analytics layout (ADR 0005) covers both "no binding" and "no analytics token", with a hint for each.
+
+Rejected: stopping with a dashboard checklist and an interactive retry (blocks the first install on an optional feature), and making Analytics Engine an explicit opt-in command (clicks before the opt-in would lose their breakdowns on every account, including the many where the binding just works).
 
 ## Failure recovery
 

@@ -105,7 +105,7 @@ The side-by-side view of a campaign's links, one row per link, which can be fold
 _Avoid_: Leaderboard, A/B test, variant report
 
 **Analytics token**:
-The read-only credential an instance needs to compute click breakdowns. Without it the instance still counts clicks and shows lifetime totals, but no breakdowns.
+The read-only credential an instance needs to compute click breakdowns. Without it the instance still counts clicks and shows lifetime totals, but no breakdowns. Breakdowns also need the Cloudflare account to offer Analytics Engine; an instance on an account that does not is the same: lifetime totals, no breakdowns.
 _Avoid_: API token, Cloudflare token, secret
 
 **Redirect cache**:

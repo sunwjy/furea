@@ -1,0 +1,130 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [
+    "**/dist/**",
+    "prototype/**",
+    "**/.wrangler/**"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "packages/shared/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "node:*",
+                  "cloudflare:*",
+                  "react",
+                  "react-dom",
+                  "react/*",
+                  "hono",
+                  "hono/*",
+                  "@furea/*"
+                ],
+                "message": "shared is Web Crypto only: no Node, Cloudflare or React APIs, no other workspace package (ADR 0007)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/admin/**",
+        "packages/cli/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@furea/worker",
+                  "@furea/worker/*",
+                  "**/apps/worker/**",
+                  "**/worker/src/**"
+                ],
+                "message": "Only the Worker imports the Worker; the API contract lives in @furea/shared (ADR 0007)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/worker/src/redirect/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../*",
+                  "../**",
+                  "!../core",
+                  "!../core/**"
+                ],
+                "message": "redirect/ imports core/ only, never api/ or the entry point (ADR 0001, ADR 0007)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/worker/src/api/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../*",
+                  "../**",
+                  "!../core",
+                  "!../core/**"
+                ],
+                "message": "api/ imports core/ only, never redirect/ or the entry point (ADR 0001, ADR 0007)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/worker/src/core/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/redirect",
+                  "**/redirect/*",
+                  "**/api",
+                  "**/api/*"
+                ],
+                "message": "core/ is shared by redirect/ and api/ and imports neither (ADR 0007)."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

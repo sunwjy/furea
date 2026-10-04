@@ -1,0 +1,32 @@
+{
+  "name": "furea",
+  "version": "0.0.0",
+  "description": "Self-hosted URL shortener on Cloudflare Workers, D1 and KV, installed with one command.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sunwjy/furea.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
+  "bin": {
+    "furea": "bin/furea.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "migrations"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

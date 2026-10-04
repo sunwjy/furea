@@ -27,7 +27,7 @@ Five tiers, named so that CI jobs, package scripts and this page use the same wo
 | `pnpm test:compat` | Compat (needs network for `npm pack`) |
 | `pnpm test:integration` | Integration; refuses to start unless `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set |
 
-In turbo, `test` does not depend on `^build` except in `packages/cli`, whose tests exercise the tarball assembly and therefore need `apps/worker` and `apps/admin` built first.
+In turbo, `test` does not depend on `^build` except in `packages/cli`, whose tests exercise the tarball assembly and therefore need `apps/worker` and `apps/admin` built first. `apps/worker`'s `test` depends on `apps/admin`'s `build` (not on `^build`): the dev-only `wrangler.jsonc` points the assets binding at `apps/admin/dist/assets`, which must exist for the Workers pool to start.
 
 ### File layout
 
@@ -52,7 +52,7 @@ All Worker tests run under `@cloudflare/vitest-plugin` with the dev-only `wrangl
 
 - **Setup** applies the real migration files with the pool's `applyD1Migrations` helper, so every migration is executed on every test run.
 - **`core/db/`** functions are tested directly against the `DB` binding: one file per table module, covering the row types and each query (including the `cache_synced` repair queries of ADR 0004).
-- **Redirect path** through `SELF.fetch`: cache hit; cache miss with D1 fallthrough and `waitUntil` backfill (asserted by reading KV after the response); disabled link; unknown slug; reserved and malformed paths; root with and without a root destination; `HEAD` and `405` (ADR 0004, 0008). The click side effect is asserted on `links.click_count`; the Analytics Engine binding is a local no-op.
+- **Redirect path** through `exports.default.fetch()` from `cloudflare:workers` (the plugin's successor to the deprecated `SELF.fetch`): cache hit; cache miss with D1 fallthrough and `waitUntil` backfill (asserted by reading KV after the response); disabled link; unknown slug; reserved and malformed paths; root with and without a root destination; `HEAD` and `405` (ADR 0004, 0008). The click side effect is asserted on `links.click_count`; the Analytics Engine binding is a local no-op.
 - **Sync pending** (ADR 0004, ADR 0012): with the fault-injecting KV wrapper, a plain link write and a campaign-wide rewrite where some links' KV writes fail must still succeed, mark exactly those links `cache_synced = 0` (visible as `syncPendingLinkCount`), and be repaired by the repair loop.
 - **Campaign schema** (ADR 0016): the `UNIQUE` fold-key indexes reject a case-variant campaign name and a case-variant UTM combination in one campaign and allow it across campaigns; deleting a campaign detaches its links and clears their `campaign_utm_key`.
 - **Campaign writes** through `SELF.fetch`: bulk creation is all-or-nothing (one failing item leaves zero new rows; collisions inside the request and with existing links; the 50-link cap); a campaign edit that would push a member past 2048 characters writes nothing and names the links (ADR 0014); adopt accepts a reordered, differently encoded destination and stores the canonical form.

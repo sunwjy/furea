@@ -58,6 +58,7 @@ Migrations live in `apps/worker/migrations/` and are written by hand:
 - One file per release that changes the schema, under 100 KB (the D1 statement limit), preferring re-runnable statements (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`).
 - The first line is a comment stating that the file is compatible with the previous release's Worker (expand-only, ADR 0006).
 - A published migration file is never edited; corrections are new files.
+- Before `0.1.0` is published, v1's schema is one file, `0001_init.sql`, and implementation PRs edit it in place; the rule above starts with the first release (ADR 0016).
 
 **drizzle was considered and rejected.** drizzle-orm v1 is still a release candidate (`1.0.0-rc.4` on 2026-09-23; stable is `0.45`). Its migration runner records history in `__drizzle_migrations` and, on D1, either runs inside the Worker (`drizzle-orm/d1/migrator`, which breaks ADR 0006's migrate-before-upload order) or needs `drizzle-kit` shipped in the package (`d1-http` driver), so at best only `drizzle-kit generate` could be used. Generated diffs also emit column drops and renames freely, which is the opposite of what the expand-only rule wants reviewers to see. With about six tables, no joins and a few dozen queries, the type inference drizzle offers does not pay for an RC dependency plus a half-adopted toolchain. Revisit only if the schema grows well beyond this.
 

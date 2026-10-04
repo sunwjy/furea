@@ -1,6 +1,6 @@
 # Testing furea
 
-What each package tests, with what, and where it runs. Decided in [Decide: testing strategy per package](https://github.com/sunwjy/furea/issues/19), building on ADR 0007 (package layout, `core/db/` as the D1 test surface), ADR 0006 (expand-only migrations) and ADR 0010 / `docs/release.md` (`ci.yml` and `release.yml`).
+What each package tests, with what, and where it runs. Decided in [Decide: testing strategy per package](https://github.com/sunwjy/furea/issues/19), building on ADR 0007 (package layout, `core/db/` as the D1 test surface), ADR 0006 (expand-only migrations) and ADR 0010 / `docs/release.md` (`ci.yml` and `release.yml`). Campaign and UTM coverage added by [Decide: campaign schema migration and test coverage for campaigns and the UTM builder](https://github.com/sunwjy/furea/issues/39) (ADR 0016).
 
 ## Tiers
 
@@ -42,15 +42,20 @@ Node environment, no bindings. `shared` is TypeScript source with Web Crypto onl
 
 - **Slug rules and reserved paths** (ADR 0002): table-driven tests over accept/reject lists for generated slugs, custom slugs and the reserved-path matcher (case-insensitive, `_*` and `.*` prefixes).
 - **API schemas** (ADR 0009): each zod schema has a parse test with one valid and a few invalid documents, asserting the per-field `details` that the error envelope needs.
+- **UTM parse/compose** (ADR 0014): a **golden-vector table** of destination + UTM values → exact composed string, and string → parsed fields plus warnings. It covers at least the ADR 0014 example, a `#fragment`, an existing query ending in `?` or `&`, no remaining pairs, `+` and `%20`, a malformed `%zz`, a duplicate key, `UTM_Source` kept as ordinary query, empty and whitespace-only values, and a result over 2048 characters. The same table is what the Worker's campaign rewrite and the admin builder agree on.
+- **Fold key and adopt matching** (ADR 0016, ADR 0014): `foldKey` vectors (case, NFC, non-ASCII), and the adopt matcher's accept/reject cases, one per `adopt_mismatch` reason code.
 - **Password hashing** (ADR 0003): a **golden-vector test**. A fixed password and a fixed salt produce a hash string that is written into the test verbatim; `verify` must accept it and `hash` must reproduce its exact format (algorithm tag, iteration count, salt, digest). Because the same function is used by the Worker (login) and by the CLI (`reset-password`, the installer's first password), sharing parameters is guaranteed by construction; the golden vector guards the **stored format** across releases, so an operator's password stays verifiable after an upgrade. A change that breaks this test is a `minor` changeset and needs a re-hash-on-login plan.
 
 ## `apps/worker` — everything in the Workers pool
 
-All Worker tests run under `@cloudflare/vitest-plugin` with the dev-only `wrangler.jsonc`, so they see a real local D1, KV, the assets binding and the `ratelimit` limiters (miniflare). **Mocking D1 or KV is not allowed**; a test that wants a particular database state creates it through `core/db/` or with SQL.
+All Worker tests run under `@cloudflare/vitest-plugin` with the dev-only `wrangler.jsonc`, so they see a real local D1, KV, the assets binding and the `ratelimit` limiters (miniflare). **Mocking D1 or KV is not allowed**; a test that wants a particular database state creates it through `core/db/` or with SQL. The one exception is **fault injection**: the cache write-through module takes the KV binding as an argument, and a test may pass a wrapper that delegates to the real binding but fails `put` for chosen keys. A fake that replaces the store is still not allowed.
 
 - **Setup** applies the real migration files with the pool's `applyD1Migrations` helper, so every migration is executed on every test run.
 - **`core/db/`** functions are tested directly against the `DB` binding: one file per table module, covering the row types and each query (including the `cache_synced` repair queries of ADR 0004).
 - **Redirect path** through `SELF.fetch`: cache hit; cache miss with D1 fallthrough and `waitUntil` backfill (asserted by reading KV after the response); disabled link; unknown slug; reserved and malformed paths; root with and without a root destination; `HEAD` and `405` (ADR 0004, 0008). The click side effect is asserted on `links.click_count`; the Analytics Engine binding is a local no-op.
+- **Sync pending** (ADR 0004, ADR 0012): with the fault-injecting KV wrapper, a plain link write and a campaign-wide rewrite where some links' KV writes fail must still succeed, mark exactly those links `cache_synced = 0` (visible as `syncPendingLinkCount`), and be repaired by the repair loop.
+- **Campaign schema** (ADR 0016): the `UNIQUE` fold-key indexes reject a case-variant campaign name and a case-variant UTM combination in one campaign and allow it across campaigns; deleting a campaign detaches its links and clears their `campaign_utm_key`.
+- **Campaign writes** through `SELF.fetch`: bulk creation is all-or-nothing (one failing item leaves zero new rows; collisions inside the request and with existing links; the 50-link cap); a campaign edit that would push a member past 2048 characters writes nothing and names the links (ADR 0014); adopt accepts a reordered, differently encoded destination and stores the canonical form.
 - **Public API** through `SELF.fetch`: each endpoint of ADR 0009 with session and API-key auth, scope checks, the error envelope, cursor pagination, and the `503 analytics_unavailable` path when `ANALYTICS_TOKEN` is absent. Stats queries that need the Analytics Engine SQL API are tested with an injected `fetch` that returns canned SQL API responses.
 - **Campaign query length**: the SQL builder for the four campaign queries (ADR 0005, *Campaigns*) is called for the worst case the ADR 0012 cap allows: 50 links with 64-character custom slugs, each with its own `created_at` inside the range, and the longest IANA `tz` name. Each query must be at most 9,000 characters, a margin under the SQL API's undocumented 10,000-character limit, so a change to the query shape cannot silently start returning `422`.
 - **Manifest ↔ `wrangler.jsonc`**: the manifest is produced by a `buildManifest()` function that the build script calls. A test calls the same function and compares its binding names, `compatibility_date` and `compatibility_flags` with the parsed `wrangler.jsonc`. The two files are kept by hand; the test is what stops them drifting (ADR 0007). Generating `wrangler.jsonc` from a TypeScript source was rejected: it would put a generation step in front of `wrangler dev` and fight hand edits.
@@ -60,7 +65,7 @@ All Worker tests run under `@cloudflare/vitest-plugin` with the dev-only `wrangl
 
 No component tests in v1: the screens were validated by the admin-UI prototype and their count is small, so React Testing Library suites would cost more upkeep than they catch. The gate for `apps/admin` is `tsc`, oxlint and the Vite build (Static), plus the **E2E smoke**.
 
-- One serial spec file, chromium only, sharing one browser session; five flows in order: log in with the seeded operator password; create a link with a custom slug and see it in the feed; open the short URL and land on the destination (302); disable the link and get the 404; open the stats page and see the "estimates unavailable" state (no analytics token).
+- One serial spec file, chromium only, sharing one browser session; six flows in order: log in with the seeded operator password; create a link with a custom slug and see it in the feed; open the short URL and land on the destination (302); disable the link and get the 404; open the stats page and see the "estimates unavailable" state (no analytics token); create a campaign, add two links in the row editor, open one short URL and land on the composed destination with its UTM parameters. The UTM builder's two-way sync is left to the `shared` golden vectors.
 - `globalSetup` prepares the local instance: `wrangler d1 migrations apply --local`, then inserts the operator password row with `wrangler d1 execute --local`, the hash computed in Node with the `shared` hashing function. Then it starts `wrangler dev` and waits for the port.
 - Budget: the whole spec should stay under about 30 seconds; if it grows past a handful of flows, split by screen rather than by step.
 
@@ -84,6 +89,8 @@ The REST client takes `fetch` as a constructor argument; tests pass a replaying 
 4. Assert, through `scripts/lib/smoke.mjs` against the `workers.dev` URL: `status` reports the candidate version; login with the printed password; create a link via the API; the redirect answers 302; the link created under `latest` still redirects; the stats endpoint answers `503 analytics_unavailable` (no analytics token is provisioned in CI).
 5. Run `deploy` a second time and assert every step prints `reuse` or `skip` (idempotency, ADR 0006).
 6. `destroy` under `if: always()`.
+
+Campaigns add nothing here: their logic lives entirely in the Worker and is covered by the Workers pool, and the CI account has no analytics token for campaign stats.
 
 On `main` pushes the job reports only. In `release.yml` it runs **before `changeset publish`** and a failure stops the release: a version that cannot install on a real account must never become `latest`.
 

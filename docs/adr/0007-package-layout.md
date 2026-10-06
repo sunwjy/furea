@@ -14,7 +14,7 @@ Decided in [Decide: monorepo package boundaries and how the Worker bundle ships 
 | Package | Published | Owns |
 |---|---|---|
 | `apps/worker` | no | The Worker source (Hono), `migrations/`, the dev-only `wrangler.jsonc`, the build that emits `dist/index.js` and `dist/manifest.json`. |
-| `apps/admin` | no | The admin surface: React + Vite SPA built with `base: '/admin/'`. Named after the glossary term, not `web`. |
+| `apps/admin` | no | The admin surface: React + Vite SPA built with `base: '/admin/'` (libraries in ADR 0017). Named after the glossary term, not `web`. |
 | `packages/shared` | no | Slug rules and reserved paths (ADR 0002), the public API's request/response zod schemas, the operator-password hashing function, the Worker manifest type. TypeScript source only, no build step; consumers bundle it. It must not depend on Cloudflare types, React or Node APIs: Web Crypto only, because the Worker, the admin surface and the CLI all import it. |
 | `packages/cli` | **yes, as `furea`** | The installer, and the build that assembles the tarball from the other three. |
 

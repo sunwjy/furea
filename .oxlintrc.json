@@ -3,7 +3,8 @@
   "ignorePatterns": [
     "**/dist/**",
     "prototype/**",
-    "**/.wrangler/**"
+    "**/.wrangler/**",
+    "apps/admin/src/routeTree.gen.ts"
   ],
   "overrides": [
     {

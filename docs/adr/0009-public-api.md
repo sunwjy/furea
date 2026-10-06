@@ -12,7 +12,7 @@ Decided in [Decide: public API surface (resources, versioning, error format)](ht
 ## Versioning
 
 - Every path starts with `/api/v1/`. Within v1 the API only ever **adds** fields, endpoints and enum values; removing or re-meaning anything requires `/api/v2`. Rejected: an unversioned `/api/`, because operators' scripts meet a new Worker every time they run `npx furea@latest deploy` and would have no way to opt out of a breaking change.
-- `GET /api/v1/openapi.json` serves an OpenAPI 3.1 document, generated from the zod schemas in `packages/shared` at release time and bundled into the Worker. It needs no authentication: the API's shape is public in the npm package anyway. No viewer page ships in v1.
+- `GET /api/v1/openapi.json` serves an OpenAPI 3.1 document, generated from the zod schemas in `packages/shared` at release time and bundled into the Worker (assembled from `z.toJSONSchema()`, ADR 0018). It needs no authentication: the API's shape is public in the npm package anyway. No viewer page ships in v1.
 
 ## Resources
 
@@ -196,7 +196,7 @@ Campaign deletion and disable-all stay at `write`: the rule concerns authenticat
 - Bodies are JSON only: any other `Content-Type` is `415 unsupported_media_type`; malformed JSON is `400 invalid_json`; bodies over 64 KiB are `413`.
 - Titles are trimmed, at most 200 characters; an empty title is stored as `null`.
 - Every error is `{"error": {"code": "<snake_case>", "message": "<English, human-readable>", "details"?: [...]}}` with the HTTP status carrying the class. Rejected: RFC 9457 Problem Details, whose `type` URIs and media type add ceremony that a shell script reading `.error.code` does not need.
-- Validation errors are `400 validation_failed` with `details: [{"field", "code", "message"}]`, one entry per failing field, so a request with a reserved slug **and** a self-referencing destination reports both. Field codes: `slug_invalid`, `slug_reserved`, `slug_immutable`, `destination_invalid`, `destination_self`, `title_too_long`, `unknown_field`, `read_only_field`, plus range/tz codes for stats and the campaign field codes listed under *Campaigns*.
+- Validation errors (produced by one middleware, ADR 0018) are `400 validation_failed` with `details: [{"field", "code", "message"}]`, one entry per failing field, so a request with a reserved slug **and** a self-referencing destination reports both. Field codes: `slug_invalid`, `slug_reserved`, `slug_immutable`, `destination_invalid`, `destination_self`, `title_too_long`, `unknown_field`, `read_only_field`, plus range/tz codes for stats and the campaign field codes listed under *Campaigns*.
 - Top-level codes: `validation_failed` 400, `invalid_json` 400, `cursor_invalid` 400, `unauthorized` 401, `invalid_password` 401, `forbidden` 403, `login_disabled` 403, `not_found` 404, `slug_taken` 409, `campaign_name_taken` 409, `campaign_member` 409, `campaign_link_limit` 409, `adopt_mismatch` 409, `utm_combination_taken` 409, `access_requires_own_domain` 409, `access_unreachable` 409, `unsupported_media_type` 415, `destination_flagged` 422, `rate_limited` 429, `internal` 500, `analytics_unavailable` 503.
 - Destination screening (ADR 0013): any write that sets a destination (links, root destination, campaigns) may answer `422 destination_flagged` with `details: [{"field", "host"}]`; a body field `"screening": "skip"` overrides the verdict and is accepted from a session only (`403 forbidden` from an API key).
 

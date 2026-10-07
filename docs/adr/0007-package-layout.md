@@ -22,7 +22,7 @@ Dependency direction, enforced with oxlint `no-restricted-imports`:
 
 - `apps/worker` and `apps/admin` and `packages/cli` may import `packages/shared`.
 - `apps/admin` never imports `apps/worker`. The public API contract is the zod schemas in `shared`, not Hono route types; a Hono RPC client was rejected because the API is also consumed by operators' own scripts and its truth must live in schemas, not in the Worker's type graph.
-- Inside `apps/worker/src/`: `redirect/` and `api/` are siblings that both import `core/` (D1 access, cache-entry parsing, click recording) and neither imports the other. This is ADR 0001's boundary made mechanical; splitting into two Workers later would copy `core/` into both.
+- Inside `apps/worker/src/`: `redirect/` and `api/` are siblings that both import `core/` (D1 access, cache-entry parsing, click recording) and neither imports the other. This is ADR 0001's boundary made mechanical; splitting into two Workers later would copy `core/` into both. A third sibling, `admin/`, answers `/admin/*` deep links with the SPA shell from the assets binding ([#42](https://github.com/sunwjy/furea/issues/42)); it follows the same rule.
 
 ## Inside the published package
 

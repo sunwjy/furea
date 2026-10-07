@@ -10,3 +10,18 @@ CREATE TABLE IF NOT EXISTS links (
   created_at   TEXT    NOT NULL,
   updated_at   TEXT    NOT NULL
 );
+
+-- Instance settings as key/value rows (ADR 0003, ADR 0009): the operator password hash, the login limiter's
+-- IP-hash salt, and later the root destination and Access mode.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT NOT NULL PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- Browser sessions (ADR 0003): only the SHA-256 of the cookie's session id is stored; 30 days absolute.
+CREATE TABLE IF NOT EXISTS sessions (
+  id_hash    TEXT NOT NULL PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions (expires_at);

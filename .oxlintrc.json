@@ -118,9 +118,34 @@
                   "**/redirect",
                   "**/redirect/*",
                   "**/api",
-                  "**/api/*"
+                  "**/api/*",
+                  "**/admin",
+                  "**/admin/*"
                 ],
-                "message": "core/ is shared by redirect/ and api/ and imports neither (ADR 0007)."
+                "message": "core/ is shared by redirect/, api/ and admin/ and imports none of them (ADR 0007)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/worker/src/admin/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../*",
+                  "../**",
+                  "!../core",
+                  "!../core/**"
+                ],
+                "message": "admin/ imports core/ only, never redirect/, api/ or the entry point (ADR 0001, ADR 0007)."
               }
             ]
           }

@@ -1,6 +1,7 @@
 // The public API under /api (ADR 0009). Imports core/ only, never redirect/ (ADR 0001, ADR 0007).
 
 import { Hono } from "hono";
+import { apiKeys } from "./api-keys.ts";
 import { auth } from "./auth.ts";
 import type { ApiEnv } from "./context.ts";
 import { logUnhandled } from "../core/log.ts";
@@ -28,6 +29,7 @@ v1.use(async (c, next) => {
   );
 });
 v1.route("/auth", auth);
+v1.route("/api-keys", apiKeys);
 v1.route("/links", links);
 v1.get("/openapi.json", (c) => c.json(buildOpenApiDocument(c.env.FUREA_VERSION)));
 

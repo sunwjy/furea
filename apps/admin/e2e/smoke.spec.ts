@@ -1,5 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
-import { OPERATOR_PASSWORD, PORT } from "./instance.ts";
+import { expect, type Page, request as playwrightRequest, test } from "@playwright/test";
+import { BASE_URL, OPERATOR_PASSWORD, PORT } from "./instance.ts";
 
 // The admin smoke (docs/testing.md): flows run in order in one browser session; later tickets append flows.
 test.describe.configure({ mode: "serial" });
@@ -119,4 +119,44 @@ test("4. edit the link, disable it and get the 404", async () => {
   expect(res.status()).toBe(404);
   expect(res.headers()["cache-control"]).toBe("no-store");
   expect(await res.text()).toBe(await (await page.request.get("/no-such-link")).text());
+});
+
+test("5. create an API key, call the API with it, and revoke it", async () => {
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Security" }).click();
+  await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
+
+  await page.getByLabel("Name").fill("e2e script");
+  await page.getByLabel(/^Write/).check();
+  await page.getByRole("button", { name: "Create key" }).click();
+
+  // Shown once, in a modal.
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByRole("heading", { name: "Copy the key for e2e script" })).toBeVisible();
+  const key = await dialog.getByLabel("API key").inputValue();
+  expect(key).toMatch(/^furea_[A-Za-z0-9]{45}$/);
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toBeHidden();
+
+  const card = page.getByRole("list", { name: "API keys" }).getByRole("listitem").filter({ hasText: "e2e script" });
+  await expect(card).toContainText(`furea_${key.slice(6, 14)}…`);
+  await expect(card).toContainText("Never used");
+
+  // A fresh request context: the key alone, no session cookie.
+  const script = await playwrightRequest.newContext({ baseURL: BASE_URL });
+  const session = await script.get("/api/v1/auth/session", { headers: { authorization: `Bearer ${key}` } });
+  expect(await session.json()).toMatchObject({ kind: "apiKey", scope: "write", apiKey: { name: "e2e script" } });
+  const minted = await script.post("/api/v1/api-keys", {
+    headers: { authorization: `Bearer ${key}` },
+    data: { name: "successor", scope: "write" },
+  });
+  expect(minted.status()).toBe(403);
+
+  await card.getByRole("button", { name: "Revoke" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Revoke" }).click();
+  await expect(page.getByText("Revoked e2e script.")).toBeVisible();
+  await expect(card).toHaveCount(0);
+
+  const revoked = await script.get("/api/v1/auth/session", { headers: { authorization: `Bearer ${key}` } });
+  expect(revoked.status()).toBe(401);
+  await script.dispose();
 });

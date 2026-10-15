@@ -9,19 +9,24 @@ const CUSTOM_SLUG = new RegExp(`^[A-Za-z0-9_-]{1,${CUSTOM_SLUG_MAX_LENGTH}}$`);
 
 /** A fresh six-character slug drawn uniformly from the generated alphabet. */
 export function generateSlug(): string {
+  return randomAlphabetString(GENERATED_SLUG_LENGTH);
+}
+
+/** `length` symbols drawn uniformly from the generated alphabet: slugs, and API key ids and secrets (ADR 0009). */
+export function randomAlphabetString(length: number): string {
   const n = GENERATED_SLUG_ALPHABET.length;
   // Largest multiple of n below 256; bytes at or above it are rejected so every symbol is equally likely.
   const limit = 256 - (256 % n);
-  let slug = "";
-  while (slug.length < GENERATED_SLUG_LENGTH) {
-    const bytes = crypto.getRandomValues(new Uint8Array(GENERATED_SLUG_LENGTH * 2));
+  let result = "";
+  while (result.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length * 2));
     for (const b of bytes) {
       if (b >= limit) continue;
-      slug += GENERATED_SLUG_ALPHABET[b % n];
-      if (slug.length === GENERATED_SLUG_LENGTH) break;
+      result += GENERATED_SLUG_ALPHABET[b % n];
+      if (result.length === length) break;
     }
   }
-  return slug;
+  return result;
 }
 
 /** Custom slug syntax: `[A-Za-z0-9_-]{1,64}`, one path segment, never normalised. */

@@ -68,5 +68,6 @@ auth.post("/logout", requireSession, async (c) => {
 auth.get("/session", requireCaller, (c) => {
   const caller = c.var.caller;
   if (caller === null) throw new Error("requireCaller let an anonymous request through");
-  return c.json({ kind: caller.kind, scope: caller.scope, apiKey: null } satisfies SessionResponse);
+  const apiKey = caller.kind === "apiKey" ? caller.apiKey : null;
+  return c.json({ kind: caller.kind, scope: caller.scope, apiKey } satisfies SessionResponse);
 });

@@ -29,3 +29,15 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions (expires_at);
+
+-- API keys (ADR 0003, ADR 0009): only the SHA-256 of the key is stored, plus the first 8 characters after `furea_`
+-- so lists can tell keys apart. Every API request looks its key up here by hash, so revocation is a row delete.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           TEXT NOT NULL PRIMARY KEY,
+  key_hash     TEXT NOT NULL UNIQUE,
+  prefix       TEXT NOT NULL,
+  name         TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 64),
+  scope        TEXT NOT NULL CHECK (scope IN ('read', 'write')),
+  created_at   TEXT NOT NULL,
+  last_used_at TEXT
+);

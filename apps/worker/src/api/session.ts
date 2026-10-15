@@ -1,9 +1,10 @@
-// Browser sessions and caller resolution (ADR 0003): the session cookie, the D1 row behind it, and the Origin
-// check that refuses cookie-authenticated mutating requests from anywhere but the instance itself.
+// Browser sessions and caller resolution (ADR 0003): the session cookie, the D1 row behind it, the Origin check
+// that refuses cookie-authenticated mutating requests from anywhere but the instance itself, and API keys.
 
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
-import { randomToken, sha256Hex } from "../core/crypto.ts";
+import { API_KEY_PREFIX, randomToken, sha256Hex } from "../core/crypto.ts";
+import { findApiKeyByHash, isUseDue, touchApiKey } from "../core/db/api-keys.ts";
 import { findSession, insertSession, purgeExpiredSessions } from "../core/db/sessions.ts";
 import type { ApiEnv } from "./context.ts";
 import { apiError, unauthorized } from "./errors.ts";
@@ -34,9 +35,25 @@ function sessionCookie(value: string, maxAge: number): string {
   return `${SESSION_COOKIE}=${value}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
-/** Sets `caller` for every API request; refuses a cookie-authenticated mutating request without a matching Origin. */
+/**
+ * Sets `caller` for every API request. A bearer `Authorization` header, when present, decides alone: a key that does
+ * not match leaves the request anonymous rather than falling back to a cookie sent with it. Keys are looked up in D1 on
+ * every request, with no cache, so a revocation takes effect on the next one (ADR 0003).
+ */
 export const authenticate = createMiddleware<ApiEnv>(async (c, next) => {
   c.set("caller", null);
+  // The auth scheme is case-insensitive (RFC 9110); the key itself is not.
+  const bearer = /^bearer +(\S*)$/i.exec(c.req.header("authorization") ?? "")?.[1];
+  if (bearer !== undefined) {
+    const row = bearer.startsWith(API_KEY_PREFIX) ? await findApiKeyByHash(c.env.DB, await sha256Hex(bearer)) : null;
+    if (row !== null) {
+      const now = new Date();
+      if (isUseDue(row, now)) await touchApiKey(c.env.DB, row.id, now);
+      c.set("caller", { kind: "apiKey", scope: row.scope, apiKey: { id: row.id, name: row.name } });
+    }
+    await next();
+    return;
+  }
   const id = getCookie(c, SESSION_COOKIE);
   if (id) {
     const idHash = await sha256Hex(id);

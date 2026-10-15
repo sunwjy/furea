@@ -1,7 +1,7 @@
 import type { Scope } from "@furea/shared";
 import type { Env } from "../core/env.ts";
 
-/** Who is calling (ADR 0009, *Who may call what*). API keys and Access mode add their own kinds later. */
+/** Who is calling (ADR 0009, *Who may call what*). Access mode adds its own kind later. */
 export interface SessionCaller {
   kind: "session";
   scope: Scope;
@@ -9,7 +9,13 @@ export interface SessionCaller {
   sessionIdHash: string;
 }
 
-export type Caller = SessionCaller;
+export interface ApiKeyCaller {
+  kind: "apiKey";
+  scope: Scope;
+  apiKey: { id: string; name: string };
+}
+
+export type Caller = SessionCaller | ApiKeyCaller;
 
 export interface ApiEnv {
   Bindings: Env;

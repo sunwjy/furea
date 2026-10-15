@@ -2,6 +2,10 @@
 // with `z.toJSONSchema()`, placed into a hand-written list of operations. Adding an endpoint adds one entry here.
 
 import {
+  ApiKey,
+  ApiKeyList,
+  CreateApiKeyRequest,
+  CreatedApiKey,
   CreateLinkRequest,
   ErrorDetail,
   ErrorEnvelope,
@@ -70,6 +74,8 @@ interface Operation {
   summary: string;
   /** `true` for the endpoints anyone may call. */
   public?: true;
+  /** `true` for the endpoints an API key may never call (ADR 0009, *Who may call what*). */
+  sessionOnly?: true;
   parameters?: JsonSchema[];
   body?: string;
   success: { status: number; description: string; schema?: string };
@@ -98,6 +104,7 @@ const OPERATIONS: Operation[] = [
     method: "post",
     path: "/auth/logout",
     summary: "End this browser session. Session only.",
+    sessionOnly: true,
     success: { status: 204, description: "Logged out; the session cookie is cleared." },
     errors: [401, 403],
   },
@@ -107,6 +114,32 @@ const OPERATIONS: Operation[] = [
     summary: "Who the caller is.",
     success: { status: 200, description: "The caller.", schema: "SessionResponse" },
     errors: [401],
+  },
+  {
+    method: "get",
+    path: "/api-keys",
+    summary: "List every API key, newest first, without the key itself. Session only.",
+    sessionOnly: true,
+    success: { status: 200, description: "Every API key.", schema: "ApiKeyList" },
+    errors: [401, 403],
+  },
+  {
+    method: "post",
+    path: "/api-keys",
+    summary: "Create an API key. The answer carries the key itself this once. Session only.",
+    sessionOnly: true,
+    body: "CreateApiKeyRequest",
+    success: { status: 201, description: "The created key, with the key itself.", schema: "CreatedApiKey" },
+    errors: [...BODY_ERRORS, 401, 403],
+  },
+  {
+    method: "delete",
+    path: "/api-keys/{id}",
+    summary: "Revoke an API key; it stops working on the next request. Session only.",
+    sessionOnly: true,
+    parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+    success: { status: 204, description: "Revoked." },
+    errors: [401, 403, 404],
   },
   {
     method: "post",
@@ -168,7 +201,7 @@ function operationObject(op: Operation): JsonSchema {
   };
   return {
     summary: op.summary,
-    ...(op.public ? { security: [] } : {}),
+    ...(op.public ? { security: [] } : op.sessionOnly ? { security: [{ session: [] }] } : {}),
     ...(op.parameters ? { parameters: op.parameters } : {}),
     ...(op.body ? { requestBody: { required: true, ...json(ref(op.body)) } } : {}),
     responses: { [String(op.success.status)]: success, ...errors(...op.errors) },
@@ -183,13 +216,19 @@ export function buildOpenApiDocument(version: string): JsonSchema {
     openapi: "3.1.0",
     info: { title: "furea public API", version },
     servers: [{ url: "/api/v1" }],
-    security: [{ session: [] }],
+    security: [{ session: [] }, { apiKey: [] }],
     paths,
     components: {
-      securitySchemes: { session: { type: "apiKey", in: "cookie", name: SESSION_COOKIE } },
+      securitySchemes: {
+        session: { type: "apiKey", in: "cookie", name: SESSION_COOKIE },
+        apiKey: { type: "http", scheme: "bearer", description: "An API key, furea_…; read or write scope." },
+      },
       schemas: {
-        ...components("input", { CreateLinkRequest, LoginRequest, UpdateLinkRequest }),
+        ...components("input", { CreateApiKeyRequest, CreateLinkRequest, LoginRequest, UpdateLinkRequest }),
         ...components("output", {
+          ApiKey,
+          ApiKeyList,
+          CreatedApiKey,
           ErrorDetail,
           ErrorEnvelope,
           Link,

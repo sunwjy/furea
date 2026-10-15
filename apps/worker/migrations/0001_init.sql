@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS links (
   created_at   TEXT    NOT NULL,
   updated_at   TEXT    NOT NULL
 );
+-- The list order of GET /links (ADR 0009): created_at desc, slug desc, walked backwards by the cursor.
+CREATE INDEX IF NOT EXISTS links_created_at_slug ON links (created_at, slug);
 
 -- Instance settings as key/value rows (ADR 0003, ADR 0009): the operator password hash, the login limiter's
 -- IP-hash salt, and later the root destination and Access mode.

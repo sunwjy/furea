@@ -2,6 +2,7 @@
 
 import { isCustomSlug, isReservedPath } from "@furea/shared";
 import { Hono } from "hono";
+import { cacheEntryOf, readCacheEntry, writeCacheEntry } from "../core/cache.ts";
 import { getLink } from "../core/db/links.ts";
 import type { Env } from "../core/env.ts";
 import { methodNotAllowed, redirectTo, robotsTxt, unknownSlug } from "./responses.ts";
@@ -17,9 +18,18 @@ redirect.get("*", async (c) => {
   // Syntax and reserved-path checks run before any lookup: `/`, multi-segment, `_*` and `.*` paths cost nothing.
   if (!isCustomSlug(segment) || isReservedPath(segment)) return unknownSlug();
 
-  const link = await getLink(c.env.DB, segment);
-  if (link === null || link.enabled === 0) return unknownSlug();
-  return redirectTo(link.destination);
+  // KV first (ADR 0004); on a miss D1 answers and the entry is backfilled after the response. An unknown slug is
+  // never written to KV, so scanners cannot spend the KV write budget.
+  let entry = await readCacheEntry(c.env.KV, segment);
+  if (entry === null) {
+    const link = await getLink(c.env.DB, segment);
+    if (link === null) return unknownSlug();
+    entry = cacheEntryOf(link);
+    // A failed backfill is retried by the next miss; it is not a sync-pending change, so nothing is logged.
+    c.executionCtx.waitUntil(writeCacheEntry(c.env.KV, segment, entry).catch(() => {}));
+  }
+  if (entry.disabled) return unknownSlug();
+  return redirectTo(entry.to);
 });
 
 redirect.all("*", () => methodNotAllowed());

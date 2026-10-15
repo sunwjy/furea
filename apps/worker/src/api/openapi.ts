@@ -1,0 +1,197 @@
+// The OpenAPI 3.1 document of `GET /api/v1/openapi.json` (ADR 0009, ADR 0018): the `shared` zod schemas converted
+// with `z.toJSONSchema()`, placed into a hand-written list of operations. Adding an endpoint adds one entry here.
+
+import {
+  CreateLinkRequest,
+  ErrorDetail,
+  ErrorEnvelope,
+  Link,
+  LinkPage,
+  ListLinksQuery,
+  LoginMethodResponse,
+  LoginRequest,
+  SessionResponse,
+} from "@furea/shared";
+import { z } from "zod";
+import { SESSION_COOKIE } from "./session.ts";
+
+type JsonSchema = Record<string, unknown>;
+
+const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
+
+/** Converts a set of named schemas, cross-referencing each other by name instead of inlining. */
+function components(io: "input" | "output", schemas: Record<string, z.ZodType>): Record<string, JsonSchema> {
+  const registry = z.registry<{ id: string }>();
+  for (const [id, schema] of Object.entries(schemas)) registry.add(schema, { id });
+  const { schemas: converted } = z.toJSONSchema(registry, {
+    io,
+    uri: (id) => ref(id).$ref,
+    // Responses only ever gain fields within v1 (ADR 0009), so a client must not be told they are closed.
+    override: ({ jsonSchema }) => {
+      if (io === "output" && jsonSchema.additionalProperties === false) delete jsonSchema.additionalProperties;
+    },
+  }) as { schemas: Record<string, JsonSchema> };
+  // `$schema` and `$id` belong to standalone JSON Schema documents, not to OpenAPI components.
+  for (const schema of Object.values(converted)) {
+    delete schema["$schema"];
+    delete schema["$id"];
+  }
+  return converted;
+}
+
+/** Query parameters from an object schema's input shape. */
+function queryParameters(schema: z.ZodObject): JsonSchema[] {
+  const { properties = {}, required = [] } = z.toJSONSchema(schema, { io: "input" }) as {
+    properties?: Record<string, JsonSchema>;
+    required?: string[];
+  };
+  return Object.entries(properties).map(([name, property]) => ({
+    name,
+    in: "query",
+    required: required.includes(name),
+    schema: property,
+  }));
+}
+
+const SLUG_PARAMETER = { name: "slug", in: "path", required: true, schema: { type: "string" } };
+
+const json = (schema: JsonSchema) => ({ content: { "application/json": { schema } } });
+
+function errors(...statuses: number[]): Record<string, JsonSchema> {
+  return Object.fromEntries(statuses.map((status) => [String(status), { $ref: "#/components/responses/Error" }]));
+}
+
+const BODY_ERRORS = [400, 413, 415] as const;
+
+interface Operation {
+  method: "get" | "post" | "patch" | "delete";
+  path: string;
+  summary: string;
+  /** `true` for the endpoints anyone may call. */
+  public?: true;
+  parameters?: JsonSchema[];
+  body?: string;
+  success: { status: number; description: string; schema?: string };
+  errors: readonly number[];
+}
+
+const OPERATIONS: Operation[] = [
+  {
+    method: "get",
+    path: "/auth/login",
+    summary: "Which login door is open: the operator password or Cloudflare Access.",
+    public: true,
+    success: { status: 200, description: "The open door.", schema: "LoginMethodResponse" },
+    errors: [],
+  },
+  {
+    method: "post",
+    path: "/auth/login",
+    summary: "Log in with the operator password; sets the session cookie.",
+    public: true,
+    body: "LoginRequest",
+    success: { status: 204, description: "Logged in; the session cookie is set." },
+    errors: [...BODY_ERRORS, 401, 403, 429],
+  },
+  {
+    method: "post",
+    path: "/auth/logout",
+    summary: "End this browser session. Session only.",
+    success: { status: 204, description: "Logged out; the session cookie is cleared." },
+    errors: [401, 403],
+  },
+  {
+    method: "get",
+    path: "/auth/session",
+    summary: "Who the caller is.",
+    success: { status: 200, description: "The caller.", schema: "SessionResponse" },
+    errors: [401],
+  },
+  {
+    method: "post",
+    path: "/links",
+    summary: "Create a link, with a custom slug or a generated one.",
+    body: "CreateLinkRequest",
+    success: { status: 201, description: "The created link.", schema: "Link" },
+    errors: [...BODY_ERRORS, 401, 403, 409],
+  },
+  {
+    method: "get",
+    path: "/links",
+    summary: "List links, newest first (createdAt desc, slug desc), cursor-paginated.",
+    parameters: queryParameters(ListLinksQuery),
+    success: { status: 200, description: "One page of links.", schema: "LinkPage" },
+    errors: [400, 401],
+  },
+  {
+    method: "get",
+    path: "/links/{slug}",
+    summary: "Read one link.",
+    parameters: [SLUG_PARAMETER],
+    success: { status: 200, description: "The link.", schema: "Link" },
+    errors: [401, 404],
+  },
+  {
+    method: "delete",
+    path: "/links/{slug}",
+    summary: "Delete a link for good; its slug becomes free.",
+    parameters: [SLUG_PARAMETER],
+    success: { status: 204, description: "Deleted." },
+    errors: [401, 403, 404],
+  },
+  {
+    method: "get",
+    path: "/openapi.json",
+    summary: "This document.",
+    public: true,
+    success: { status: 200, description: "The OpenAPI 3.1 document." },
+    errors: [],
+  },
+];
+
+function operationObject(op: Operation): JsonSchema {
+  const success = {
+    description: op.success.description,
+    ...(op.success.schema ? json(ref(op.success.schema)) : {}),
+  };
+  return {
+    summary: op.summary,
+    ...(op.public ? { security: [] } : {}),
+    ...(op.parameters ? { parameters: op.parameters } : {}),
+    ...(op.body ? { requestBody: { required: true, ...json(ref(op.body)) } } : {}),
+    responses: { [String(op.success.status)]: success, ...errors(...op.errors) },
+  };
+}
+
+export function buildOpenApiDocument(version: string): JsonSchema {
+  const paths: Record<string, Record<string, JsonSchema>> = {};
+  for (const op of OPERATIONS) (paths[op.path] ??= {})[op.method] = operationObject(op);
+
+  return {
+    openapi: "3.1.0",
+    info: { title: "furea public API", version },
+    servers: [{ url: "/api/v1" }],
+    security: [{ session: [] }],
+    paths,
+    components: {
+      securitySchemes: { session: { type: "apiKey", in: "cookie", name: SESSION_COOKIE } },
+      schemas: {
+        ...components("input", { CreateLinkRequest, LoginRequest }),
+        ...components("output", {
+          ErrorDetail,
+          ErrorEnvelope,
+          Link,
+          LinkPage,
+          LoginMethodResponse,
+          SessionResponse,
+        }),
+      },
+      responses: {
+        Error: {
+          description: "Any failure: the error envelope, with per-field details on validation_failed.",
+          ...json(ref("ErrorEnvelope")),
+        },
+      },
+    },
+  };
+}

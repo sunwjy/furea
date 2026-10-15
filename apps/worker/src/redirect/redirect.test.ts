@@ -65,6 +65,41 @@ describe("a link in D1", () => {
   });
 });
 
+describe("the redirect cache", () => {
+  it("answers a hit from KV alone, without a D1 row", async () => {
+    await env.KV.put("kv-only", JSON.stringify({ to: "https://example.com/from-kv", disabled: false }));
+    const res = await request("/kv-only");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("https://example.com/from-kv");
+  });
+
+  it("is consulted before D1: a disabled entry hides an enabled row", async () => {
+    await insertLink(env.DB, { slug: "kv-off", destination: "https://example.com/d1" });
+    await env.KV.put("kv-off", JSON.stringify({ to: "https://example.com/d1", disabled: true }));
+    expect(await snapshot(await request("/kv-off"))).toEqual(await snapshot(await request("/nope")));
+  });
+
+  it("is backfilled from D1 after a miss", async () => {
+    await insertLink(env.DB, { slug: "fill-on", destination: "https://example.com/fill" });
+    await insertLink(env.DB, { slug: "fill-off", destination: "https://example.com/off", enabled: false });
+
+    expect((await request("/fill-on")).status).toBe(302);
+    expect((await request("/fill-off")).status).toBe(404);
+
+    await vi.waitFor(async () => {
+      expect(await env.KV.get("fill-on", "json")).toEqual({ to: "https://example.com/fill", disabled: false });
+      expect(await env.KV.get("fill-off", "json")).toEqual({ to: "https://example.com/off", disabled: true });
+    });
+  });
+
+  it("never stores an unknown slug", async () => {
+    expect((await request("/never-was")).status).toBe(404);
+    // Give a stray waitUntil the same chance the backfill test gives a real one.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await env.KV.get("never-was")).toBeNull();
+  });
+});
+
 describe("the unknown-slug response", () => {
   it("is a fixed uncached HTML 404", async () => {
     const res = await snapshot(await request("/nope"));

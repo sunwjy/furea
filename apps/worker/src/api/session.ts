@@ -61,3 +61,10 @@ export const requireSession = createMiddleware<ApiEnv>(async (c, next) => {
   if (c.var.caller.kind !== "session") return apiError(403, "forbidden", "Session required.");
   await next();
 });
+
+/** Link and campaign writes (ADR 0009): any caller with the `write` scope. */
+export const requireWrite = createMiddleware<ApiEnv>(async (c, next) => {
+  if (c.var.caller === null) return unauthorized();
+  if (c.var.caller.scope !== "write") return apiError(403, "forbidden", "This needs the write scope.");
+  await next();
+});

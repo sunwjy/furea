@@ -4,6 +4,8 @@ import { Hono } from "hono";
 import { auth } from "./auth.ts";
 import type { ApiEnv } from "./context.ts";
 import { notFound } from "./errors.ts";
+import { links } from "./links.ts";
+import { buildOpenApiDocument } from "./openapi.ts";
 import { authenticate } from "./session.ts";
 
 const v1 = new Hono<ApiEnv>();
@@ -13,6 +15,8 @@ v1.use(async (c, next) => {
   if (!c.res.headers.has("Cache-Control")) c.res.headers.set("Cache-Control", "no-store");
 });
 v1.route("/auth", auth);
+v1.route("/links", links);
+v1.get("/openapi.json", (c) => c.json(buildOpenApiDocument(c.env.FUREA_VERSION)));
 
 export const api = new Hono<ApiEnv>();
 api.route("/v1", v1);

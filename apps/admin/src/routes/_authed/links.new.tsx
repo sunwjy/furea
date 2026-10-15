@@ -1,4 +1,4 @@
-import { CustomSlug, Destination, Title, type CreateLinkRequest, type ErrorDetail } from "@furea/shared";
+import { CustomSlug, Destination, Title, type CreateLinkRequest } from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -9,7 +9,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ApiError } from "@/lib/api";
+import { ApiError, fieldDetails } from "@/lib/api";
 import { createLink, LINKS_KEY } from "@/lib/links";
 
 export const Route = createFileRoute("/_authed/links/new")({
@@ -26,8 +26,6 @@ type NewLinkInput = z.input<typeof NewLinkForm>;
 type NewLinkValues = z.output<typeof NewLinkForm>;
 
 const FIELDS = ["destination", "slug", "title"] as const;
-type FieldName = (typeof FIELDS)[number];
-const isField = (name: string): name is FieldName => (FIELDS as readonly string[]).includes(name);
 
 function NewLinkPage() {
   const queryClient = useQueryClient();
@@ -58,10 +56,7 @@ function NewLinkPage() {
       form.setError("slug", { message: "This slug is taken. Choose another one." });
       return;
     }
-    const fieldErrors =
-      error instanceof ApiError
-        ? error.details.filter((d): d is ErrorDetail & { field: FieldName } => isField(d.field))
-        : [];
+    const fieldErrors = fieldDetails(error, FIELDS);
     if (fieldErrors.length === 0) {
       toast.error(error instanceof ApiError ? error.message : "Could not create the link. Try again.");
       return;

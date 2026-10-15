@@ -1,6 +1,15 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { deleteLink, getLink, insertLink, listLinks } from "./links.ts";
+import {
+  deleteLink,
+  getLink,
+  insertLink,
+  listLinks,
+  listSyncPending,
+  markCacheSynced,
+  markSyncPending,
+  updateLink,
+} from "./links.ts";
 
 describe("links", () => {
   it("inserts a link with the schema defaults and reads it back by slug", async () => {
@@ -56,6 +65,78 @@ describe("deleteLink", () => {
     await insertLink(env.DB, { slug: "Del-2", destination: "https://example.com" });
     expect(await deleteLink(env.DB, "del-2")).toBe(false);
     expect(await getLink(env.DB, "Del-2")).not.toBeNull();
+  });
+});
+
+describe("updateLink", () => {
+  const created = new Date("2026-10-01T00:00:00.000Z");
+  const edited = new Date("2026-10-02T00:00:00.000Z");
+
+  it("changes only the given fields, bumps updated_at and returns the row", async () => {
+    await insertLink(env.DB, { slug: "Up-1", destination: "https://example.com/a", title: "A", now: created });
+
+    const row = await updateLink(env.DB, "Up-1", { destination: "https://example.com/b", enabled: false }, edited);
+
+    expect(row).toEqual({
+      slug: "Up-1",
+      destination: "https://example.com/b",
+      title: "A",
+      enabled: 0,
+      click_count: 0,
+      cache_synced: 1,
+      created_at: created.toISOString(),
+      updated_at: edited.toISOString(),
+    });
+    expect(await getLink(env.DB, "Up-1")).toEqual(row);
+  });
+
+  it("clears the title with null and enables a disabled link", async () => {
+    await insertLink(env.DB, { slug: "Up-2", destination: "https://example.com", title: "T", enabled: false });
+    expect(await updateLink(env.DB, "Up-2", { title: null, enabled: true })).toMatchObject({ title: null, enabled: 1 });
+  });
+
+  it("returns the row untouched for an empty change", async () => {
+    await insertLink(env.DB, { slug: "Up-3", destination: "https://example.com", now: created });
+    expect(await updateLink(env.DB, "Up-3", {}, edited)).toMatchObject({ updated_at: created.toISOString() });
+  });
+
+  it("returns null for an unknown slug, matched byte for byte", async () => {
+    await insertLink(env.DB, { slug: "Up-4", destination: "https://example.com/4" });
+    expect(await updateLink(env.DB, "up-4", { title: "x" })).toBeNull();
+    expect(await updateLink(env.DB, "up-4", {})).toBeNull();
+    expect(await getLink(env.DB, "Up-4")).toMatchObject({ title: null });
+  });
+});
+
+describe("cache_synced (ADR 0004)", () => {
+  beforeEach(async () => {
+    await env.DB.exec("UPDATE links SET cache_synced = 1");
+  });
+
+  it("marks a link sync pending and lists pending links, least recently changed first", async () => {
+    await insertLink(env.DB, { slug: "Sp-new", destination: "https://example.com", now: new Date("2026-10-03") });
+    await insertLink(env.DB, { slug: "Sp-old", destination: "https://example.com", now: new Date("2026-10-01") });
+    await insertLink(env.DB, { slug: "Sp-ok", destination: "https://example.com" });
+    await markSyncPending(env.DB, "Sp-new");
+    await markSyncPending(env.DB, "Sp-old");
+
+    expect((await getLink(env.DB, "Sp-new"))?.cache_synced).toBe(0);
+    expect((await listSyncPending(env.DB)).map((r) => r.slug)).toEqual(["Sp-old", "Sp-new"]);
+    expect((await listSyncPending(env.DB, 1)).map((r) => r.slug)).toEqual(["Sp-old"]);
+  });
+
+  it("clears sync pending only for the version of the row that was written to the cache", async () => {
+    await insertLink(env.DB, { slug: "Sp-race", destination: "https://example.com/1", now: new Date("2026-10-01") });
+    await markSyncPending(env.DB, "Sp-race");
+    const written = (await getLink(env.DB, "Sp-race"))!;
+    // A later edit lands while the earlier version's cache write is in flight.
+    await updateLink(env.DB, "Sp-race", { destination: "https://example.com/2" }, new Date("2026-10-02"));
+
+    await markCacheSynced(env.DB, written);
+    expect((await getLink(env.DB, "Sp-race"))?.cache_synced).toBe(0);
+
+    await markCacheSynced(env.DB, (await getLink(env.DB, "Sp-race"))!);
+    expect((await getLink(env.DB, "Sp-race"))?.cache_synced).toBe(1);
   });
 });
 

@@ -20,6 +20,12 @@ export class ApiError extends Error {
   }
 }
 
+/** The API's per-field details for the given form fields; empty for any other error. */
+export function fieldDetails<F extends string>(error: unknown, fields: readonly F[]): (ErrorDetail & { field: F })[] {
+  if (!(error instanceof ApiError)) return [];
+  return error.details.filter((d): d is ErrorDetail & { field: F } => (fields as readonly string[]).includes(d.field));
+}
+
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;

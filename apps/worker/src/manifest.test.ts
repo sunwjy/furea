@@ -13,6 +13,7 @@ interface WranglerConfig {
   analytics_engine_datasets: { binding: string; dataset: string }[];
   ratelimits: { name: string; namespace_id: string; simple: { limit: number; period: number } }[];
   vars: Record<string, string>;
+  triggers: { crons: string[] };
 }
 
 const wrangler = parse(wranglerSource) as WranglerConfig;
@@ -35,6 +36,11 @@ describe("buildManifest() and the dev-only wrangler.jsonc", () => {
     );
     expect(manifest.bindings.ratelimits).toEqual(wrangler.ratelimits);
     expect(manifest.bindings.plain_text).toEqual(Object.keys(wrangler.vars));
+  });
+
+  it("agree on the Cron Trigger, every five minutes (ADR 0004)", () => {
+    expect(manifest.crons).toEqual(["*/5 * * * *"]);
+    expect(wrangler.triggers.crons).toEqual(manifest.crons);
   });
 
   it("names the bundle's main module", () => {

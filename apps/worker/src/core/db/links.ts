@@ -39,6 +39,68 @@ export async function insertLink(db: D1Database, link: NewLink): Promise<boolean
   return result.meta.changes === 1;
 }
 
+export interface LinkChanges {
+  destination?: string | undefined;
+  /** `null` clears the title. */
+  title?: string | null | undefined;
+  enabled?: boolean | undefined;
+}
+
+/**
+ * Applies the given fields and bumps `updated_at`; returns the row as stored, or `null` for an unknown slug. With no
+ * fields it only reads the row, so an empty merge-patch leaves `updated_at` alone.
+ */
+export async function updateLink(
+  db: D1Database,
+  slug: string,
+  changes: LinkChanges,
+  now = new Date(),
+): Promise<LinkRow | null> {
+  const sets: string[] = [];
+  const params: (string | number | null)[] = [];
+  if (changes.destination !== undefined) {
+    sets.push("destination = ?");
+    params.push(changes.destination);
+  }
+  if (changes.title !== undefined) {
+    sets.push("title = ?");
+    params.push(changes.title);
+  }
+  if (changes.enabled !== undefined) {
+    sets.push("enabled = ?");
+    params.push(changes.enabled ? 1 : 0);
+  }
+  if (sets.length === 0) return getLink(db, slug);
+  return db
+    .prepare(`UPDATE links SET ${sets.join(", ")}, updated_at = ? WHERE slug = ? RETURNING ${COLUMNS}`)
+    .bind(...params, now.toISOString(), slug)
+    .first<LinkRow>();
+}
+
+/** The link's latest change has not reached the redirect cache (ADR 0004). */
+export async function markSyncPending(db: D1Database, slug: string): Promise<void> {
+  await db.prepare("UPDATE links SET cache_synced = 0 WHERE slug = ?").bind(slug).run();
+}
+
+/**
+ * The cache now holds `written`. Matching on `updated_at` keeps a link pending when a later edit landed while this
+ * version was being written, since the cache may still lag that edit.
+ */
+export async function markCacheSynced(db: D1Database, written: LinkRow): Promise<void> {
+  await db
+    .prepare("UPDATE links SET cache_synced = 1 WHERE slug = ? AND updated_at = ? AND cache_synced = 0")
+    .bind(written.slug, written.updated_at)
+    .run();
+}
+
+/** Sync-pending links, least recently changed first; all of them without a limit. */
+export async function listSyncPending(db: D1Database, limit?: number): Promise<LinkRow[]> {
+  const sql = `SELECT ${COLUMNS} FROM links WHERE cache_synced = 0 ORDER BY updated_at, slug`;
+  const statement = limit === undefined ? db.prepare(sql) : db.prepare(`${sql} LIMIT ?`).bind(limit);
+  const { results } = await statement.all<LinkRow>();
+  return results;
+}
+
 /** Hard delete (ADR 0002); returns whether a link existed. */
 export async function deleteLink(db: D1Database, slug: string): Promise<boolean> {
   const result = await db.prepare("DELETE FROM links WHERE slug = ?").bind(slug).run();

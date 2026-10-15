@@ -44,6 +44,9 @@
       "simple": { "limit": 30, "period": 60 }
     }
   ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "vars": {
     "FUREA_VERSION": "0.0.0-dev"
   }

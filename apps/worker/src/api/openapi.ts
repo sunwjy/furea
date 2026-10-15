@@ -11,6 +11,7 @@ import {
   LoginMethodResponse,
   LoginRequest,
   SessionResponse,
+  UpdateLinkRequest,
 } from "@furea/shared";
 import { z } from "zod";
 import { SESSION_COOKIE } from "./session.ts";
@@ -132,6 +133,17 @@ const OPERATIONS: Operation[] = [
     errors: [401, 404],
   },
   {
+    method: "patch",
+    path: "/links/{slug}",
+    summary:
+      "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the " +
+      "redirect cache entry.",
+    parameters: [SLUG_PARAMETER],
+    body: "UpdateLinkRequest",
+    success: { status: 200, description: "The edited link.", schema: "Link" },
+    errors: [...BODY_ERRORS, 401, 403, 404],
+  },
+  {
     method: "delete",
     path: "/links/{slug}",
     summary: "Delete a link for good; its slug becomes free.",
@@ -176,7 +188,7 @@ export function buildOpenApiDocument(version: string): JsonSchema {
     components: {
       securitySchemes: { session: { type: "apiKey", in: "cookie", name: SESSION_COOKIE } },
       schemas: {
-        ...components("input", { CreateLinkRequest, LoginRequest }),
+        ...components("input", { CreateLinkRequest, LoginRequest, UpdateLinkRequest }),
         ...components("output", {
           ErrorDetail,
           ErrorEnvelope,

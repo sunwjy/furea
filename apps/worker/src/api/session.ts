@@ -14,7 +14,7 @@ const SESSION_ID_BYTES = 32;
 /** Added to every failed password attempt, on top of the rate limiters (ADR 0003, *Brute force*). */
 export const FAILED_LOGIN_DELAY_MS = 500;
 
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+export const SAFE_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Creates a session row (purging expired ones first) and returns the Set-Cookie value that carries its id. */
 export async function startSession(db: D1Database, now = new Date()): Promise<{ id: string; setCookie: string }> {

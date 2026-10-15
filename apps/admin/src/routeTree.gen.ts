@@ -15,6 +15,7 @@ import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedCampaignsRouteImport } from './routes/_authed/campaigns'
 import { Route as AuthedSecurityRouteImport } from './routes/_authed/security'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
+import { Route as AuthedLinkSlugRouteImport } from './routes/_authed/link.$slug'
 import { Route as AuthedLinksNewRouteImport } from './routes/_authed/links.new'
 
 const AuthedRoute = AuthedRouteImport.update({
@@ -46,6 +47,11 @@ const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedLinkSlugRoute = AuthedLinkSlugRouteImport.update({
+  id: '/link/$slug',
+  path: '/link/$slug',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedLinksNewRoute = AuthedLinksNewRouteImport.update({
   id: '/links/new',
   path: '/links/new',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/campaigns': typeof AuthedCampaignsRoute
   '/security': typeof AuthedSecurityRoute
   '/settings': typeof AuthedSettingsRoute
+  '/link/$slug': typeof AuthedLinkSlugRoute
   '/links/new': typeof AuthedLinksNewRoute
 }
 export interface FileRoutesByTo {
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/security': typeof AuthedSecurityRoute
   '/settings': typeof AuthedSettingsRoute
   '/': typeof AuthedIndexRoute
+  '/link/$slug': typeof AuthedLinkSlugRoute
   '/links/new': typeof AuthedLinksNewRoute
 }
 export interface FileRoutesById {
@@ -76,14 +84,28 @@ export interface FileRoutesById {
   '/_authed/security': typeof AuthedSecurityRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/link/$slug': typeof AuthedLinkSlugRoute
   '/_authed/links/new': typeof AuthedLinksNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/campaigns' | '/security' | '/settings' | '/links/new'
+    | '/'
+    | '/login'
+    | '/campaigns'
+    | '/security'
+    | '/settings'
+    | '/link/$slug'
+    | '/links/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/campaigns' | '/security' | '/settings' | '/' | '/links/new'
+  to:
+    | '/login'
+    | '/campaigns'
+    | '/security'
+    | '/settings'
+    | '/'
+    | '/link/$slug'
+    | '/links/new'
   id:
     | '__root__'
     | '/_authed'
@@ -92,6 +114,7 @@ export interface FileRouteTypes {
     | '/_authed/security'
     | '/_authed/settings'
     | '/_authed/'
+    | '/_authed/link/$slug'
     | '/_authed/links/new'
   fileRoutesById: FileRoutesById
 }
@@ -144,6 +167,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/link/$slug': {
+      id: '/_authed/link/$slug'
+      path: '/link/$slug'
+      fullPath: '/link/$slug'
+      preLoaderRoute: typeof AuthedLinkSlugRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/links/new': {
       id: '/_authed/links/new'
       path: '/links/new'
@@ -159,6 +189,7 @@ interface AuthedRouteChildren {
   AuthedSecurityRoute: typeof AuthedSecurityRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedLinkSlugRoute: typeof AuthedLinkSlugRoute
   AuthedLinksNewRoute: typeof AuthedLinksNewRoute
 }
 
@@ -167,6 +198,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSecurityRoute: AuthedSecurityRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedLinkSlugRoute: AuthedLinkSlugRoute,
   AuthedLinksNewRoute: AuthedLinksNewRoute,
 }
 

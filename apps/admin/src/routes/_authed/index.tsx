@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+import { EnableToggle, LinkBadges } from "@/components/link-status";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -130,10 +130,14 @@ function LinkCard({ link }: { link: LinkResource }) {
             <a href={link.shortUrl} target="_blank" rel="noreferrer" className="font-medium hover:underline">
               {link.shortUrl.replace(/^https?:\/\//, "")}
             </a>
-            {link.enabled ? null : <Badge variant="secondary">Disabled</Badge>}
-            {link.cacheSynced ? null : <Badge variant="outline">Sync pending</Badge>}
+            <LinkBadges link={link} />
           </div>
-          <p className="truncate text-sm text-muted-foreground" title={link.destination}>
+          <Link
+            to="/link/$slug"
+            params={{ slug: link.slug }}
+            className="truncate text-sm text-muted-foreground hover:underline"
+            title={link.destination}
+          >
             {link.title === null ? null : (
               <>
                 <span className="text-foreground">{link.title}</span>
@@ -141,13 +145,14 @@ function LinkCard({ link }: { link: LinkResource }) {
               </>
             )}
             {link.destination}
-          </p>
+          </Link>
         </div>
         <div className="flex shrink-0 gap-1">
           <Button variant="ghost" size="sm" onClick={copy}>
             <Copy data-icon="inline-start" />
             Copy
           </Button>
+          <EnableToggle link={link} />
           <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
             <Trash2 data-icon="inline-start" />
             Delete

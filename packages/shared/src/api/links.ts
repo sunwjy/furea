@@ -68,6 +68,25 @@ export const CreateLinkRequest = z.strictObject({
 export type CreateLinkRequest = z.input<typeof CreateLinkRequest>;
 export type CreateLinkBody = z.output<typeof CreateLinkRequest>;
 
+/** Present in a `PATCH` body at all, with any value, it is refused: a link's slug never changes (ADR 0002). */
+const ImmutableSlug = z
+  .unknown()
+  .refine(() => false, { message: "A link's slug cannot be changed.", params: { code: "slug_immutable" } })
+  .describe("Never accepted: a link's slug cannot be changed (slug_immutable).");
+
+/**
+ * `PATCH /links/:slug`, a merge-patch (ADR 0009): only the fields present change, `"title": null` clears the title,
+ * and an empty `{}` still rewrites the cache entry.
+ */
+export const UpdateLinkRequest = z.strictObject({
+  destination: Destination.optional(),
+  title: Title.optional(),
+  enabled: z.boolean().optional().describe("false disables the link, true enables it again."),
+  slug: ImmutableSlug.optional(),
+});
+export type UpdateLinkRequest = Omit<z.input<typeof UpdateLinkRequest>, "slug">;
+export type UpdateLinkBody = Omit<z.output<typeof UpdateLinkRequest>, "slug">;
+
 /** `GET /links` query string. `cursor` is opaque; the Worker decodes it (`cursor_invalid`). */
 export const ListLinksQuery = z.object({
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CreateLinkRequest, Link, LinkPage, ListLinksQuery } from "./links.ts";
+import { CreateLinkRequest, Link, LinkPage, ListLinksQuery, UpdateLinkRequest } from "./links.ts";
 
 function codes(result: { success: boolean; error?: { issues: { path: PropertyKey[]; code: string; params?: unknown }[] } }) {
   return (
@@ -84,6 +84,43 @@ describe("CreateLinkRequest", () => {
 
   it("requires a destination", () => {
     expect(codes(CreateLinkRequest.safeParse({}))).toEqual([{ path: "destination", code: "invalid_type" }]);
+  });
+});
+
+describe("UpdateLinkRequest", () => {
+  it("accepts an empty patch", () => {
+    expect(UpdateLinkRequest.parse({})).toEqual({});
+  });
+
+  it("keeps only the fields present, trims the title and reads null as clearing it", () => {
+    expect(UpdateLinkRequest.parse({ destination: "https://example.com/b", title: "  New  ", enabled: false })).toEqual({
+      destination: "https://example.com/b",
+      title: "New",
+      enabled: false,
+    });
+    expect(UpdateLinkRequest.parse({ title: null })).toEqual({ title: null });
+    expect(UpdateLinkRequest.parse({ title: "  " })).toEqual({ title: null });
+  });
+
+  it("refuses a slug as slug_immutable, whatever its value", () => {
+    expect(codes(UpdateLinkRequest.safeParse({ slug: "other" }))).toEqual([{ path: "slug", code: "slug_immutable" }]);
+    expect(codes(UpdateLinkRequest.safeParse({ slug: null }))).toEqual([{ path: "slug", code: "slug_immutable" }]);
+  });
+
+  it("reports every failing field", () => {
+    expect(
+      codes(UpdateLinkRequest.safeParse({ destination: "ftp://x", title: "t".repeat(201), enabled: "no", extra: 1 })),
+    ).toEqual([
+      { path: "destination", code: "destination_invalid" },
+      { path: "title", code: "title_too_long" },
+      { path: "enabled", code: "invalid_type" },
+      { path: "", code: "unrecognized_keys" },
+    ]);
+  });
+
+  it("refuses null for destination and enabled", () => {
+    expect(UpdateLinkRequest.safeParse({ destination: null }).success).toBe(false);
+    expect(UpdateLinkRequest.safeParse({ enabled: null }).success).toBe(false);
   });
 });
 

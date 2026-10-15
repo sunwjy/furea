@@ -1,7 +1,7 @@
 import { GENERATED_SLUG_ALPHABET, Link, LinkPage } from "@furea/shared";
 import { env, exports } from "cloudflare:workers";
-import { beforeAll, describe, expect, it } from "vitest";
-import { insertLink } from "../core/db/links.ts";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { getLink, insertLink, markSyncPending } from "../core/db/links.ts";
 import { SESSION_COOKIE, startSession } from "./session.ts";
 
 const ORIGIN = "https://s.example.com";
@@ -34,6 +34,21 @@ function create(body: unknown, init: { origin?: string; anonymous?: boolean } = 
 async function created(body: unknown): Promise<Link> {
   const res = await create(body);
   expect(res.status).toBe(201);
+  return Link.parse(await res.json());
+}
+
+function patch(slug: string, body: unknown, init: { anonymous?: boolean } = {}): Promise<Response> {
+  return api(`/links/${slug}`, {
+    ...init,
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function patched(slug: string, body: unknown): Promise<Link> {
+  const res = await patch(slug, body);
+  expect(res.status).toBe(200);
   return Link.parse(await res.json());
 }
 
@@ -269,5 +284,128 @@ describe("DELETE /api/v1/links/:slug", () => {
 
   it("answers 401 without a session", async () => {
     expect((await api("/links/whatever", { method: "DELETE", anonymous: true })).status).toBe(401);
+  });
+});
+
+describe("PATCH /api/v1/links/:slug", () => {
+  it("edits the destination and title, rewrites the cache entry and redirects to the new destination", async () => {
+    const before = await created({ destination: "https://example.com/v1", slug: "edit-me", title: "Old" });
+
+    const link = await patched("edit-me", { destination: "https://example.com/v2", title: "  New  " });
+
+    expect(link).toEqual({
+      ...before,
+      destination: "https://example.com/v2",
+      title: "New",
+      updatedAt: expect.any(String),
+    });
+    expect(link.updatedAt > before.updatedAt).toBe(true);
+    expect(await env.KV.get("edit-me", "json")).toEqual({ to: "https://example.com/v2", disabled: false });
+    expect((await visit("edit-me")).headers.get("location")).toBe("https://example.com/v2");
+  });
+
+  it("is a merge-patch: absent fields stay, a null title clears it", async () => {
+    await created({ destination: "https://example.com/keep", slug: "merge-me", title: "Keep" });
+
+    expect(await patched("merge-me", { enabled: false })).toMatchObject({
+      destination: "https://example.com/keep",
+      title: "Keep",
+      enabled: false,
+    });
+    expect(await patched("merge-me", { title: null })).toMatchObject({ title: null, enabled: false });
+  });
+
+  it("disables a link: the cache entry says disabled and the redirect path answers the unknown-slug response from KV", async () => {
+    await created({ destination: "https://example.com/on", slug: "switch-me" });
+    const unknown = await (await visit("no-such-link")).text();
+
+    expect((await patched("switch-me", { enabled: false })).enabled).toBe(false);
+
+    expect(await env.KV.get("switch-me", "json")).toEqual({ to: "https://example.com/on", disabled: true });
+    // Re-enable the row behind the cache's back: a D1 lookup would now redirect, the cache entry must not.
+    await env.DB.prepare("UPDATE links SET enabled = 1 WHERE slug = 'switch-me'").run();
+    const res = await visit("switch-me");
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe(unknown);
+  });
+
+  it("re-enables a disabled link", async () => {
+    await created({ destination: "https://example.com/back", slug: "re-enable" });
+    await patched("re-enable", { enabled: false });
+
+    expect((await patched("re-enable", { enabled: true })).enabled).toBe(true);
+
+    expect(await env.KV.get("re-enable", "json")).toEqual({ to: "https://example.com/back", disabled: false });
+    expect((await visit("re-enable")).headers.get("location")).toBe("https://example.com/back");
+  });
+
+  it("answers an empty patch with 200 and rewrites the cache entry, which repairs a lost one", async () => {
+    const before = await created({ destination: "https://example.com/empty", slug: "empty-patch" });
+    await env.KV.delete("empty-patch");
+    await markSyncPending(env.DB, "empty-patch");
+
+    const link = await patched("empty-patch", {});
+
+    expect(link).toEqual({ ...before, cacheSynced: true });
+    expect(await env.KV.get("empty-patch", "json")).toEqual({ to: "https://example.com/empty", disabled: false });
+    expect((await getLink(env.DB, "empty-patch"))?.cache_synced).toBe(1);
+  });
+
+  it("refuses a slug as slug_immutable, together with every other failing field", async () => {
+    await created({ destination: "https://example.com/fixed", slug: "fixed-slug" });
+
+    const res = await patch("fixed-slug", { slug: "other", destination: "https://s.example.com/loop", extra: true });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { code: string; details: { field: string; code: string }[] } };
+    expect(body.error.code).toBe("validation_failed");
+    expect(body.error.details.map(({ field, code }) => ({ field, code }))).toEqual([
+      { field: "destination", code: "destination_self" },
+      { field: "slug", code: "slug_immutable" },
+      { field: "extra", code: "unknown_field" },
+    ]);
+    expect(await getLink(env.DB, "fixed-slug")).toMatchObject({ destination: "https://example.com/fixed" });
+  });
+
+  it("answers 404 for an unknown slug, matched byte for byte, without writing the cache", async () => {
+    await created({ destination: "https://example.com/case", slug: "Case-Edit" });
+
+    const res = await patch("case-edit", { title: "x" });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "not_found" } });
+    expect(await env.KV.get("case-edit")).toBeNull();
+    expect(await getLink(env.DB, "Case-Edit")).toMatchObject({ title: null });
+  });
+
+  it("answers 401 without a session", async () => {
+    expect((await patch("whatever", {}, { anonymous: true })).status).toBe(401);
+  });
+});
+
+describe("the tail of a write request", () => {
+  it("repairs sync-pending links after the response", async () => {
+    // A link whose cache entry never made it to KV.
+    await insertLink(env.DB, { slug: "left-behind", destination: "https://example.com/behind" });
+    await markSyncPending(env.DB, "left-behind");
+    await created({ destination: "https://example.com/trigger", slug: "tail-trigger" });
+
+    expect((await patch("tail-trigger", { title: "Any write" })).status).toBe(200);
+
+    await vi.waitFor(async () => {
+      expect(await env.KV.get("left-behind", "json")).toEqual({ to: "https://example.com/behind", disabled: false });
+      expect((await getLink(env.DB, "left-behind"))?.cache_synced).toBe(1);
+    });
+  });
+
+  it("does not run for a read", async () => {
+    await insertLink(env.DB, { slug: "read-only-tail", destination: "https://example.com/read" });
+    await markSyncPending(env.DB, "read-only-tail");
+
+    expect((await api("/links/read-only-tail")).status).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await env.KV.get("read-only-tail")).toBeNull();
+    await env.DB.prepare("UPDATE links SET cache_synced = 1 WHERE slug = 'read-only-tail'").run();
   });
 });

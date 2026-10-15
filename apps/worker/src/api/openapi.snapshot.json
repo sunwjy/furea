@@ -233,6 +233,59 @@
           }
         }
       },
+      "patch": {
+        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The edited link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Link"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
       "delete": {
         "summary": "Delete a link for good; its slug becomes free.",
         "parameters": [
@@ -318,6 +371,30 @@
         "required": [
           "password"
         ],
+        "additionalProperties": false
+      },
+      "UpdateLinkRequest": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "description": "An absolute http or https URL, at most 2048 characters of printable ASCII (percent-encoded), not pointing at this instance."
+          },
+          "title": {
+            "description": "Trimmed, at most 200 characters; empty or null means no title.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "description": "false disables the link, true enables it again.",
+            "type": "boolean"
+          },
+          "slug": {
+            "description": "Never accepted: a link's slug cannot be changed (slug_immutable)."
+          }
+        },
         "additionalProperties": false
       },
       "ErrorDetail": {

@@ -48,6 +48,12 @@ export function log(entry: LogEvent): void {
   else console.warn(text);
 }
 
+/** An exception that escaped a handler, as `unhandled_error`. */
+export function logUnhandled(route: RouteKind, err: unknown): void {
+  const error = err instanceof Error ? err : new Error(String(err));
+  log({ event: "unhandled_error", route, message: error.message, ...(error.stack ? { stack: error.stack } : {}) });
+}
+
 export function routeKindOf(pathname: string): RouteKind {
   if (pathname === "/api" || pathname.startsWith("/api/")) return "api";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";

@@ -92,3 +92,29 @@ test("3. open the short URL and land on the destination with a 302", async () =>
   await expect(page).toHaveURL(DESTINATION);
   await expect(page.getByText("Disallow: /admin/")).toBeVisible();
 });
+
+test("4. edit the link, disable it and get the 404", async () => {
+  await page.goto("/admin/");
+  const card = page.getByRole("list", { name: "Links" }).getByRole("listitem").first();
+
+  // Edit → Save on the link's own page; the slug is not among the fields.
+  await card.getByRole("link", { name: `E2E launch · ${DESTINATION}` }).click();
+  await expect(page.getByRole("heading", { name: `/${SLUG}` })).toBeVisible();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel("Slug")).toHaveCount(0);
+  await page.getByLabel("Title (optional)").fill("E2E edited");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText(`Saved /${SLUG}.`)).toBeVisible();
+  await expect(page.getByRole("definition").filter({ hasText: "E2E edited" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Links" }).first().click();
+  await expect(card).toContainText(`E2E edited · ${DESTINATION}`);
+  await card.getByRole("button", { name: "Disable" }).click();
+  await expect(card.getByText("Disabled", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Enable" })).toBeVisible();
+
+  const res = await page.request.get(`/${SLUG}`, { maxRedirects: 0 });
+  expect(res.status()).toBe(404);
+  expect(res.headers()["cache-control"]).toBe("no-store");
+  expect(await res.text()).toBe(await (await page.request.get("/no-such-link")).text());
+});

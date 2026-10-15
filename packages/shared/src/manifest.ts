@@ -12,6 +12,8 @@ export interface WorkerManifest {
   main_module: string;
   compatibility_date: string;
   compatibility_flags: string[];
+  /** Cron Triggers the installer registers next to the script upload (ADR 0004, ADR 0006). */
+  crons: string[];
   bindings: {
     d1: string;
     kv: string;

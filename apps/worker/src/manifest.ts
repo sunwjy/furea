@@ -9,6 +9,7 @@ export function buildManifest(): WorkerManifest {
     main_module: "index.js",
     compatibility_date: "2026-09-28",
     compatibility_flags: [],
+    crons: ["*/5 * * * *"],
     bindings: {
       d1: "DB",
       kv: "KV",

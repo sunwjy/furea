@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { admin } from "./admin/index.ts";
 import { api } from "./api/index.ts";
 import { apiError } from "./api/errors.ts";
-import { log, routeKindOf } from "./core/log.ts";
+import { logUnhandled, routeKindOf } from "./core/log.ts";
+import { repairSyncPending } from "./core/sync.ts";
 import type { Env } from "./core/env.ts";
 import { redirect } from "./redirect/index.ts";
 
@@ -14,7 +15,7 @@ app.route("/", redirect);
 
 app.onError((err, c) => {
   const route = routeKindOf(c.req.path);
-  log({ event: "unhandled_error", route, message: err.message, ...(err.stack ? { stack: err.stack } : {}) });
+  logUnhandled(route, err);
   if (route === "api") return apiError(500, "internal", "Internal error.");
   return new Response("Internal Server Error", {
     status: 500,
@@ -22,4 +23,10 @@ app.onError((err, c) => {
   });
 });
 
-export default app satisfies ExportedHandler<Env>;
+export default {
+  fetch: app.fetch,
+  // The Cron Trigger (`*/5 * * * *`, ADR 0004): the safety net that repairs every sync-pending link.
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(repairSyncPending(env.DB, env.KV).catch((err: unknown) => logUnhandled("cron", err)));
+  },
+} satisfies ExportedHandler<Env>;

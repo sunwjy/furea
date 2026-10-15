@@ -14,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { linkQuery } from "@/lib/links";
 
-// `/link/$slug`, not `/links/$slug`: under `/links/` the static `/links/new` would hide a link whose slug is `new`.
-export const Route = createFileRoute("/_authed/link/$slug")({
+// Nothing static lives under `/links/`: any word there is also a valid custom slug, so the new-link page is `/new`.
+export const Route = createFileRoute("/_authed/links/$slug")({
   component: LinkPage,
 });
 

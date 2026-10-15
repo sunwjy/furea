@@ -42,7 +42,7 @@ function LinksPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="font-heading text-xl font-semibold">Links</h1>
-        <Link to="/links/new" className={buttonVariants()}>
+        <Link to="/new" className={buttonVariants()}>
           <Plus data-icon="inline-start" />
           New link
         </Link>
@@ -133,7 +133,7 @@ function LinkCard({ link }: { link: LinkResource }) {
             <LinkBadges link={link} />
           </div>
           <Link
-            to="/link/$slug"
+            to="/links/$slug"
             params={{ slug: link.slug }}
             className="truncate text-sm text-muted-foreground hover:underline"
             title={link.destination}

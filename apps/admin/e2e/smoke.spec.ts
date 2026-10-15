@@ -52,6 +52,7 @@ const DESTINATION = `http://127.0.0.1:${PORT}/robots.txt?from=e2e`;
 
 test("2. create a link with a custom slug and see it in the feed", async () => {
   await page.getByRole("link", { name: "New link" }).click();
+  await expect(page).toHaveURL(/\/admin\/new$/);
   await expect(page.getByRole("heading", { name: "New link" })).toBeVisible();
 
   // A field error from the form's schema, before anything is sent.
@@ -99,6 +100,7 @@ test("4. edit the link, disable it and get the 404", async () => {
 
   // Edit → Save on the link's own page; the slug is not among the fields.
   await card.getByRole("link", { name: `E2E launch · ${DESTINATION}` }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/links/${SLUG}$`));
   await expect(page.getByRole("heading", { name: `/${SLUG}` })).toBeVisible();
   await page.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByLabel("Slug")).toHaveCount(0);

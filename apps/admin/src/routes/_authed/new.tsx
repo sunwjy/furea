@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { createLink, LINKS_KEY } from "@/lib/links";
 
-export const Route = createFileRoute("/_authed/links/new")({
+export const Route = createFileRoute("/_authed/new")({
   component: NewLinkPage,
 });
 

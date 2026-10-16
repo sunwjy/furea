@@ -50,9 +50,22 @@ const io: Io = {
   openUrl,
 };
 
+/** The first Ctrl-C (or SIGTERM) lets the command clean up; a second one exits at once. */
+function untilInterrupted(): AbortSignal {
+  const controller = new AbortController();
+  const interrupt = () => {
+    if (controller.signal.aborted) process.exit(130);
+    controller.abort();
+  };
+  process.on("SIGINT", interrupt);
+  process.on("SIGTERM", interrupt);
+  return controller.signal;
+}
+
 process.exitCode = await runCli(process.argv.slice(2), {
   fetch: globalThis.fetch,
   env: process.env,
   configDir: defaultConfigDir(process.env),
   io,
+  untilInterrupted,
 });

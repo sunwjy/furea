@@ -88,6 +88,14 @@ export interface ScriptSubdomain {
   previews_enabled?: boolean;
 }
 
+export interface Tail {
+  id: string;
+  /** The `trace-v1` WebSocket; the URL itself is the capability. */
+  url: string;
+  /** Delivery silently stops here, so the CLI recreates the tail itself. */
+  expires_at: string;
+}
+
 export interface CloudflareClientOptions {
   token: string;
   fetch: typeof fetch;
@@ -263,6 +271,16 @@ export class CloudflareClient {
 
   setScriptSubdomain(accountId: string, script: string, value: ScriptSubdomain): Promise<ScriptSubdomain> {
     return this.request<ScriptSubdomain>("POST", `/accounts/${accountId}/workers/scripts/${script}/subdomain`, value);
+  }
+
+  // Live tail (ADR 0011): the deploy token's Workers Scripts Edit is enough.
+
+  createTail(accountId: string, script: string): Promise<Tail> {
+    return this.request<Tail>("POST", `/accounts/${accountId}/workers/scripts/${script}/tails`, { filters: [] });
+  }
+
+  async deleteTail(accountId: string, script: string, id: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/workers/scripts/${script}/tails/${id}`);
   }
 
   async putSecret(accountId: string, script: string, name: string, text: string): Promise<void> {

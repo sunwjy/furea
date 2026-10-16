@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
+import { packLatest } from "./lib/pack.mjs";
 
 const run = promisify(execFile);
 
@@ -28,17 +29,6 @@ async function migrationFiles(dir) {
   return (await readdir(dir))
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10) || a.localeCompare(b));
-}
-
-/** Packs `furea@latest` into `dir`; null when the registry has no such package. */
-async function packLatest(dir) {
-  try {
-    const { stdout } = await run("npm", ["pack", "furea@latest", "--json", "--pack-destination", dir], { cwd: dir });
-    return join(dir, JSON.parse(stdout)[0].filename);
-  } catch (err) {
-    if (/\bE404\b/.test(`${err.stdout}\n${err.stderr}`)) return null;
-    throw new Error(`npm pack furea@latest failed:\n${err.stderr || err.message}`);
-  }
 }
 
 class MigrationFailure extends Error {

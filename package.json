@@ -12,9 +12,15 @@
     "test": "oxlint && pnpm test:scripts && turbo run build typecheck test",
     "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
     "test:e2e": "turbo run test:e2e",
-    "test:compat": "node scripts/check-expand-only.mjs"
+    "test:compat": "node scripts/check-expand-only.mjs",
+    "test:integration": "node scripts/integration.mjs",
+    "changeset": "changeset",
+    "release": "pnpm test && node scripts/check-tarball.mjs && node scripts/check-migrations.mjs && pnpm test:e2e && pnpm test:compat && changeset publish",
+    "release:snapshot": "pnpm test && node scripts/check-tarball.mjs && changeset publish --no-git-tag --tag snapshot"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.1",
     "@furea/shared": "workspace:*",
     "miniflare": "5.20261001.0-alpha",
     "oxlint": "^1.86.0",

@@ -65,7 +65,14 @@ All Worker tests run under `@cloudflare/vitest-plugin` with the dev-only `wrangl
 
 No component tests in v1: the screens were validated by the admin-UI prototype and their count is small, so React Testing Library suites would cost more upkeep than they catch. The gate for `apps/admin` is `tsc`, oxlint and the Vite build (Static), plus the **E2E smoke**.
 
-- One serial spec file, chromium only, sharing one browser session; six flows in order: log in with the seeded operator password; create a link with a custom slug and see it in the feed; open the short URL and land on the destination (302); disable the link and get the 404; open the stats page and see the "estimates unavailable" state (no analytics token); create a campaign, add two links in the row editor, open one short URL and land on the composed destination with its UTM parameters. The UTM builder's two-way sync is left to the `shared` golden vectors.
+- One serial spec file, chromium only, sharing one browser session. Each ticket appends its flow at the end, so the numbers in `smoke.spec.ts` follow the order the flows landed in:
+  1. Log in with the seeded operator password ([#42](https://github.com/sunwjy/furea/issues/42)).
+  2. Create a link with a custom slug and see it in the feed ([#43](https://github.com/sunwjy/furea/issues/43)).
+  3. Open the short URL and land on the destination (302) ([#43](https://github.com/sunwjy/furea/issues/43)).
+  4. Edit the link, disable it and get the 404 ([#44](https://github.com/sunwjy/furea/issues/44)).
+  5. Create an API key on the Security page, call the API with it alone, see it refused `POST /api-keys`, revoke it and get the 401 ([#45](https://github.com/sunwjy/furea/issues/45)).
+  - Still to come: open the stats page and see the "estimates unavailable" state, with no analytics token ([#49](https://github.com/sunwjy/furea/issues/49)); create a campaign, add two links in the row editor, open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
+- The UTM builder's two-way sync is left to the `shared` golden vectors.
 - `globalSetup` prepares the local instance: `wrangler d1 migrations apply --local`, then inserts the operator password row with `wrangler d1 execute --local`, the hash computed in Node with the `shared` hashing function. Then it starts `wrangler dev` and waits for the port.
 - Budget: the whole spec should stay under about 30 seconds; if it grows past a handful of flows, split by screen rather than by step.
 

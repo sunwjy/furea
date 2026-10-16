@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { CloudflareApiError } from "./cloudflare/client.ts";
 import { deploy } from "./commands/deploy.ts";
 import { login, logout } from "./commands/login.ts";
+import { status } from "./commands/status.ts";
 import type { CommandContext } from "./context.ts";
 import { CredentialsFile } from "./credentials.ts";
 import { CliError, type Io } from "./io.ts";
@@ -17,6 +18,8 @@ export interface CliDeps {
   io: Io;
   /** The package `deploy` installs; this package unless a test substitutes a fixed one. */
   installer?: Installer;
+  /** The npm registry lookup of the update check; `fetch` unless a test separates it from the Cloudflare API. */
+  registryFetch?: typeof fetch;
 }
 
 // workers.dev rules (ADR 0006): at most 63 characters, alphanumerics and dashes, no leading or trailing dash.
@@ -39,9 +42,10 @@ const USAGE = `Usage: furea [command] [--name <instance>] [--account <account id
 
 Commands:
   deploy (default)   Install or upgrade an instance (--workers-subdomain <name>, --allow-downgrade)
+  status             Report the instance and any drift; exit 1 when something is wrong (--no-update-check)
   login              Store a deploy token (--account-token opens the account-owned token form)
   logout             Remove a stored deploy token
-  status, logs, domain, analytics-token, reset-password, access, destroy`;
+  logs, domain, analytics-token, reset-password, access, destroy`;
 
 /** Runs one CLI invocation and returns its exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
@@ -57,6 +61,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         "account-token": { type: "boolean", default: false },
         "workers-subdomain": { type: "string" },
         "allow-downgrade": { type: "boolean", default: false },
+        "no-update-check": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
         version: { type: "boolean", short: "v", default: false },
       },
@@ -88,8 +93,16 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           installer: deps.installer ?? ownInstaller(),
           workersSubdomain: values["workers-subdomain"],
           allowDowngrade: values["allow-downgrade"],
+          registryFetch: deps.registryFetch ?? deps.fetch,
+          noUpdateCheck: values["no-update-check"],
         });
         return 0;
+      case "status":
+        return await status(ctx, {
+          installer: deps.installer ?? ownInstaller(),
+          registryFetch: deps.registryFetch ?? deps.fetch,
+          noUpdateCheck: values["no-update-check"],
+        });
       case "login":
         await login(ctx, { accountToken: values["account-token"] });
         return 0;

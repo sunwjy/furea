@@ -40,6 +40,8 @@ interface DeployRun {
   answers?: string[];
   env?: Record<string, string>;
   secrets?: FixtureSecrets;
+  /** The registry's `latest` dist-tag; unset, the registry is unreachable. */
+  latest?: string;
 }
 
 async function deploy(scenario: string, run: DeployRun = {}) {
@@ -50,8 +52,11 @@ async function deploy(scenario: string, run: DeployRun = {}) {
     return api.fetch(input, init);
   }) as typeof fetch;
   const terminal = fakeTerminal({ interactive: run.interactive ?? false, answers: run.answers ?? [] });
+  const registry = (async () =>
+    run.latest === undefined ? Promise.reject(new TypeError("fetch failed")) : Response.json({ latest: run.latest })) as typeof fetch;
   const code = await runCli(["deploy", ...(run.argv ?? [])], {
     fetch: spy,
+    registryFetch: registry,
     env: { CLOUDFLARE_API_TOKEN: api.token, CLOUDFLARE_ACCOUNT_ID: api.accountId!, ...run.env },
     configDir: mkdtempSync(join(tmpdir(), "furea-cli-")),
     io: terminal,
@@ -249,6 +254,29 @@ describe("deploy", () => {
 
     expect(code).toBe(1);
     expect(terminal.stderr.join("\n")).toContain("--workers-subdomain");
+  });
+
+  it("ends with a hint when a newer release than the one just deployed exists", async () => {
+    const { code, terminal, api } = await deploy("deploy-redeploy", { latest: "0.2.4" });
+
+    expect(code).toBe(0);
+    expect(terminal.stdout.at(-1)).toBe(
+      "furea 0.2.4 is out; this installer deployed 0.2.0 (a cached or pinned version). Run: npx furea@latest deploy",
+    );
+    api.done();
+  });
+
+  it.each<[string, DeployRun]>([
+    ["this installer is the latest", { latest: "0.2.0" }],
+    ["the registry is unreachable", {}],
+    ["--no-update-check is given", { latest: "0.2.4", argv: ["--no-update-check"] }],
+    ["FUREA_NO_UPDATE_CHECK=1 is set", { latest: "0.2.4", env: { FUREA_NO_UPDATE_CHECK: "1" } }],
+  ])("ends on the admin URL when %s", async (_case, run) => {
+    const { code, terminal, api } = await deploy("deploy-redeploy", run);
+
+    expect(code).toBe(0);
+    expect(terminal.stdout.at(-1)).toMatch(/^Ready: https:\/\/furea\..*\/admin\/$/);
+    api.done();
   });
 
   it("refuses an instance name workers.dev would not accept", async () => {

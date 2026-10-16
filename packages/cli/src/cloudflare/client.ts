@@ -25,6 +25,13 @@ export class CloudflareApiError extends Error {
   }
 }
 
+/** "This Worker does not exist on your account", and "no workers.dev subdomain" on the account endpoint. */
+export const NOT_FOUND_CODE = 10007;
+
+export function isNotFound(error: unknown): boolean {
+  return error instanceof CloudflareApiError && (error.status === 404 || error.hasCode(NOT_FOUND_CODE));
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -35,16 +42,56 @@ export interface TokenStatus {
   status: string;
 }
 
+export interface D1Database {
+  uuid: string;
+  name: string;
+}
+
+export interface KvNamespace {
+  id: string;
+  title: string;
+}
+
+export interface Binding {
+  type: string;
+  name: string;
+  [key: string]: unknown;
+}
+
+export interface D1Result<Row = Record<string, unknown>> {
+  success: boolean;
+  results: Row[];
+  meta?: { changes?: number; [key: string]: unknown };
+}
+
+export interface AssetUploadSession {
+  jwt: string;
+  buckets: string[][];
+}
+
+export interface ScriptSubdomain {
+  enabled: boolean;
+  previews_enabled?: boolean;
+}
+
 export interface CloudflareClientOptions {
   token: string;
   fetch: typeof fetch;
   baseUrl?: string;
 }
 
-interface Envelope<T> {
+export interface Envelope<T> {
   success?: boolean;
   errors?: CloudflareMessage[];
   result: T;
+  result_info?: { page?: number; per_page?: number; total_pages?: number; count?: number; total_count?: number };
+}
+
+export interface SendOptions {
+  json?: unknown;
+  form?: FormData;
+  /** A bearer other than the deploy token (the asset upload token). */
+  bearer?: string;
 }
 
 export class CloudflareClient {
@@ -59,11 +106,18 @@ export class CloudflareClient {
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = { authorization: `Bearer ${this.#token}` };
+    return (await this.send<T>(method, path, body === undefined ? {} : { json: body })).result as T;
+  }
+
+  /** One API call with a JSON or multipart body; returns the whole envelope, for callers that need `result_info`. */
+  async send<T>(method: string, path: string, options: SendOptions = {}): Promise<Partial<Envelope<T>>> {
+    const headers: Record<string, string> = { authorization: `Bearer ${options.bearer ?? this.#token}` };
     const init: RequestInit = { method, headers };
-    if (body !== undefined) {
+    if (options.json !== undefined) {
       headers["content-type"] = "application/json";
-      init.body = JSON.stringify(body);
+      init.body = JSON.stringify(options.json);
+    } else if (options.form !== undefined) {
+      init.body = options.form;
     }
     const response = await this.#fetch(`${this.#base}${path}`, init);
     let envelope: Partial<Envelope<T>> = {};
@@ -75,7 +129,7 @@ export class CloudflareClient {
     if (!response.ok || envelope.success === false) {
       throw new CloudflareApiError(method, path, response.status, envelope.errors ?? []);
     }
-    return envelope.result as T;
+    return envelope;
   }
 
   /** Every account the token can see; answers for user and account-owned tokens alike. */
@@ -89,5 +143,105 @@ export class CloudflareClient {
 
   verifyAccountToken(accountId: string): Promise<TokenStatus> {
     return this.request<TokenStatus>("GET", `/accounts/${accountId}/tokens/verify`);
+  }
+
+  // D1 and KV (ADR 0006 step 2). Neither name is unique server-side, so lookups compare exactly.
+
+  async findD1Database(accountId: string, name: string): Promise<D1Database | undefined> {
+    const path = `/accounts/${accountId}/d1/database?name=${encodeURIComponent(name)}&per_page=100`;
+    return (await this.request<D1Database[]>("GET", path)).find((db) => db.name === name);
+  }
+
+  createD1Database(accountId: string, name: string): Promise<D1Database> {
+    return this.request<D1Database>("POST", `/accounts/${accountId}/d1/database`, { name });
+  }
+
+  async findKvNamespace(accountId: string, title: string): Promise<KvNamespace | undefined> {
+    for (let page = 1; ; page++) {
+      const envelope = await this.send<KvNamespace[]>("GET", `/accounts/${accountId}/storage/kv/namespaces?per_page=1000&page=${page}`);
+      const found = (envelope.result ?? []).find((ns) => ns.title === title);
+      if (found) return found;
+      if (page >= (envelope.result_info?.total_pages ?? 1)) return undefined;
+    }
+  }
+
+  createKvNamespace(accountId: string, title: string): Promise<KvNamespace> {
+    return this.request<KvNamespace>("POST", `/accounts/${accountId}/storage/kv/namespaces`, { title });
+  }
+
+  /** One request, which D1 runs as one transaction even with several statements. */
+  d1Query<Row = Record<string, unknown>>(accountId: string, databaseId: string, sql: string, params?: unknown[]): Promise<D1Result<Row>[]> {
+    const path = `/accounts/${accountId}/d1/database/${databaseId}/query`;
+    return this.request<D1Result<Row>[]>("POST", path, params ? { sql, params } : { sql });
+  }
+
+  // The Worker script (ADR 0006 steps 2 and 5-8).
+
+  /** The deployed script's bindings, or undefined when there is no script of that name. */
+  async getScriptBindings(accountId: string, script: string): Promise<Binding[] | undefined> {
+    try {
+      const settings = await this.request<{ bindings?: Binding[] }>("GET", `/accounts/${accountId}/workers/scripts/${script}/settings`);
+      return settings.bindings ?? [];
+    } catch (error) {
+      if (isNotFound(error)) return undefined;
+      throw error;
+    }
+  }
+
+  createAssetUploadSession(
+    accountId: string,
+    script: string,
+    manifest: Record<string, { hash: string; size: number }>,
+  ): Promise<AssetUploadSession> {
+    return this.request<AssetUploadSession>("POST", `/accounts/${accountId}/workers/scripts/${script}/assets-upload-session`, { manifest });
+  }
+
+  /** Authorised by the session's upload token, not the deploy token; the last bucket answers with the completion token. */
+  async uploadAssets(accountId: string, jwt: string, form: FormData): Promise<{ jwt?: string } | undefined> {
+    const envelope = await this.send<{ jwt?: string } | null>("POST", `/accounts/${accountId}/workers/assets/upload?base64=true`, {
+      form,
+      bearer: jwt,
+    });
+    return envelope.result ?? undefined;
+  }
+
+  async putScript(accountId: string, script: string, form: FormData): Promise<void> {
+    await this.send("PUT", `/accounts/${accountId}/workers/scripts/${script}`, { form });
+  }
+
+  async getSchedules(accountId: string, script: string): Promise<string[]> {
+    const result = await this.request<{ schedules?: Array<{ cron: string }> }>("GET", `/accounts/${accountId}/workers/scripts/${script}/schedules`);
+    return (result.schedules ?? []).map((s) => s.cron);
+  }
+
+  /** Replaces every schedule of the script. */
+  async putSchedules(accountId: string, script: string, crons: string[]): Promise<void> {
+    await this.request("PUT", `/accounts/${accountId}/workers/scripts/${script}/schedules`, crons.map((cron) => ({ cron })));
+  }
+
+  /** The account's workers.dev subdomain, or undefined when none is registered. */
+  async getAccountSubdomain(accountId: string): Promise<string | undefined> {
+    try {
+      return (await this.request<{ subdomain: string }>("GET", `/accounts/${accountId}/workers/subdomain`)).subdomain;
+    } catch (error) {
+      if (isNotFound(error)) return undefined;
+      throw error;
+    }
+  }
+
+  async putAccountSubdomain(accountId: string, subdomain: string): Promise<string> {
+    return (await this.request<{ subdomain: string }>("PUT", `/accounts/${accountId}/workers/subdomain`, { subdomain })).subdomain;
+  }
+
+  getScriptSubdomain(accountId: string, script: string): Promise<ScriptSubdomain> {
+    return this.request<ScriptSubdomain>("GET", `/accounts/${accountId}/workers/scripts/${script}/subdomain`);
+  }
+
+  setScriptSubdomain(accountId: string, script: string, value: ScriptSubdomain): Promise<ScriptSubdomain> {
+    return this.request<ScriptSubdomain>("POST", `/accounts/${accountId}/workers/scripts/${script}/subdomain`, value);
+  }
+
+  async putSecret(accountId: string, script: string, name: string, text: string): Promise<void> {
+    await this.request("PUT", `/accounts/${accountId}/workers/scripts/${script}/secrets`, { name, text, type: "secret_text" });
   }
 }

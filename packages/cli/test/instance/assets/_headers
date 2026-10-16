@@ -1,0 +1,2 @@
+/admin/*
+  X-Frame-Options: DENY

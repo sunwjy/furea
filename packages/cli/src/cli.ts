@@ -2,18 +2,25 @@
 // injected, so commands are tested end to end against recorded fixtures.
 
 import { parseArgs } from "node:util";
+import { CloudflareApiError } from "./cloudflare/client.ts";
+import { deploy } from "./commands/deploy.ts";
 import { login, logout } from "./commands/login.ts";
 import type { CommandContext } from "./context.ts";
 import { CredentialsFile } from "./credentials.ts";
 import { CliError, type Io } from "./io.ts";
-import { packageVersion } from "./package-files.ts";
+import { type Installer, ownInstaller, packageVersion } from "./package-files.ts";
 
 export interface CliDeps {
   fetch: typeof fetch;
   env: Record<string, string | undefined>;
   configDir: string;
   io: Io;
+  /** The package `deploy` installs; this package unless a test substitutes a fixed one. */
+  installer?: Installer;
 }
+
+// workers.dev rules (ADR 0006): at most 63 characters, alphanumerics and dashes, no leading or trailing dash.
+const INSTANCE_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 
 const COMMANDS = [
   "deploy",
@@ -31,7 +38,7 @@ const COMMANDS = [
 const USAGE = `Usage: furea [command] [--name <instance>] [--account <account id>]
 
 Commands:
-  deploy (default)   Install or upgrade an instance
+  deploy (default)   Install or upgrade an instance (--workers-subdomain <name>, --allow-downgrade)
   login              Store a deploy token (--account-token opens the account-owned token form)
   logout             Remove a stored deploy token
   status, logs, domain, analytics-token, reset-password, access, destroy`;
@@ -48,6 +55,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         name: { type: "string", default: "furea" },
         account: { type: "string" },
         "account-token": { type: "boolean", default: false },
+        "workers-subdomain": { type: "string" },
+        "allow-downgrade": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
         version: { type: "boolean", short: "v", default: false },
       },
@@ -62,6 +71,9 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       return 0;
     }
     if (!(COMMANDS as readonly string[]).includes(command)) throw new CliError(`Unknown command "${command}".\n\n${USAGE}`);
+    if (!INSTANCE_NAME.test(values.name)) {
+      throw new CliError(`"${values.name}" is not a valid instance name: up to 63 letters, digits and dashes, not starting or ending with a dash.`);
+    }
     const ctx: CommandContext = {
       fetch: deps.fetch,
       env: deps.env,
@@ -71,6 +83,13 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       account: values.account,
     };
     switch (command) {
+      case "deploy":
+        await deploy(ctx, {
+          installer: deps.installer ?? ownInstaller(),
+          workersSubdomain: values["workers-subdomain"],
+          allowDowngrade: values["allow-downgrade"],
+        });
+        return 0;
       case "login":
         await login(ctx, { accountToken: values["account-token"] });
         return 0;
@@ -83,6 +102,11 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   } catch (error) {
     if (error instanceof CliError) {
       io.err(error.message);
+      return 1;
+    }
+    if (error instanceof CloudflareApiError) {
+      // Nothing is rolled back; re-running the command resumes where this one stopped (ADR 0006).
+      io.err(`Cloudflare refused a request: ${error.message}\nFix the cause and run the command again; finished steps are reused.`);
       return 1;
     }
     if (error instanceof TypeError && "code" in error && String(error.code).startsWith("ERR_PARSE_ARGS")) {

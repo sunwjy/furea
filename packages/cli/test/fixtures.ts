@@ -157,6 +157,8 @@ const IDENTIFYING_KEYS: Record<string, string> = {
   hostname: "HOST",
   zone_name: "HOST",
   subdomain: "SUBDOMAIN",
+  // Asset upload and completion tokens; they also appear as the bearer of the upload requests.
+  jwt: "JWT",
 };
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;

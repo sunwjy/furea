@@ -5,6 +5,9 @@ import { CliError, choose, type Io } from "./io.ts";
 
 export type TokenKind = "user" | "account";
 
+// Short permission keys of the dashboard's template URLs, as listed on
+// https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/ (checked 2026-10-16;
+// `dns` is the DNS key, `zone_dns` and `workers_kv` were wrong keys once printed there, cloudflare-docs#29825).
 const DEPLOY_PERMISSIONS = [
   { key: "workers_scripts", type: "edit" },
   { key: "workers_kv_storage", type: "edit" },
@@ -13,12 +16,24 @@ const DEPLOY_PERMISSIONS = [
   { key: "dns", type: "edit" },
 ];
 
+/** The separate read-only credential of ADR 0005, never folded into the deploy token. */
+const ANALYTICS_PERMISSIONS = [{ key: "account_analytics", type: "read" }];
+
+function templateUrl(kind: TokenKind, permissions: object[], name: string): string {
+  const keys = encodeURIComponent(JSON.stringify(permissions));
+  return kind === "account"
+    ? `https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=${keys}&name=${name}`
+    : `https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=${keys}&accountId=*&zoneId=all&name=${name}`;
+}
+
 /** The dashboard form pre-filled with the deploy permissions; the user-token form unless asked otherwise. */
 export function deployTokenTemplateUrl(kind: TokenKind): string {
-  const keys = encodeURIComponent(JSON.stringify(DEPLOY_PERMISSIONS));
-  return kind === "account"
-    ? `https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=${keys}&name=furea`
-    : `https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=${keys}&accountId=*&zoneId=all&name=furea`;
+  return templateUrl(kind, DEPLOY_PERMISSIONS, "furea");
+}
+
+/** The dashboard form pre-filled with Account Analytics Read, for the `ANALYTICS_TOKEN` secret. */
+export function analyticsTokenTemplateUrl(kind: TokenKind): string {
+  return templateUrl(kind, ANALYTICS_PERMISSIONS, "furea-analytics");
 }
 
 /** `--account` / `CLOUDFLARE_ACCOUNT_ID` when given, else the one account `GET /accounts` returns (or a choice). */

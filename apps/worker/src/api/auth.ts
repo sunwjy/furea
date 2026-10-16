@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { randomToken, sha256Hex } from "../core/crypto.ts";
 import { deleteSession } from "../core/db/sessions.ts";
-import { getOrCreateSetting, getSetting } from "../core/db/settings.ts";
+import { getAccessConfig, getOrCreateSetting, getSetting } from "../core/db/settings.ts";
 import { log } from "../core/log.ts";
 import type { ApiEnv } from "./context.ts";
 import { apiError } from "./errors.ts";
@@ -24,7 +24,19 @@ export const auth = new Hono<ApiEnv>();
 const RETRY_AFTER_SECONDS = "60";
 const GLOBAL_LIMITER_KEY = "login";
 
-auth.get("/login", (c) => c.json({ method: "password" } satisfies LoginMethodResponse));
+const accessOn = async (db: D1Database) => (await getAccessConfig(db)) !== null;
+
+auth.get("/login", async (c) =>
+  c.json({ method: (await accessOn(c.env.DB)) ? "access" : "password" } satisfies LoginMethodResponse),
+);
+
+/** While Access mode is on the password is not accepted at all, and refusing it spends no limiter budget. */
+const passwordDoor = createMiddleware<ApiEnv>(async (c, next) => {
+  if (await accessOn(c.env.DB)) {
+    return apiError(403, "login_disabled", "Password login is off while Cloudflare Access mode is on.");
+  }
+  await next();
+});
 
 /**
  * The login brake (ADR 0003, *Brute force*): a per-client limiter keyed by a salted hash of the IP, then an
@@ -46,7 +58,7 @@ function rateLimited(limiter: "per_client" | "global"): Response {
   });
 }
 
-auth.post("/login", loginBrake, jsonBody(LoginRequest), async (c) => {
+auth.post("/login", passwordDoor, loginBrake, jsonBody(LoginRequest), async (c) => {
   const stored = await getSetting(c.env.DB, "operator_password_hash");
   // verifyPassword compares digests in constant time; a missing hash fails the same way as a wrong password.
   if (stored === null || !(await verifyPassword(c.var.body.password, stored))) {
@@ -57,6 +69,8 @@ auth.post("/login", loginBrake, jsonBody(LoginRequest), async (c) => {
   return new Response(null, { status: 204, headers: { "Set-Cookie": setCookie, "Cache-Control": "no-store" } });
 });
 
+// An Access caller has no session row or cookie here; the admin surface ends its Access session at
+// /cdn-cgi/access/logout.
 auth.post("/logout", requireSession, async (c) => {
   if (c.var.caller?.kind === "session") await deleteSession(c.env.DB, c.var.caller.sessionIdHash);
   return new Response(null, {

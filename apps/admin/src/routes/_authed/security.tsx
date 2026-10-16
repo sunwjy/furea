@@ -1,9 +1,11 @@
 import {
+  AccessSettingsRequest,
   ApiKeyName,
   ChangePasswordRequest,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   Scope,
+  type AccessSettings,
   type ApiKey,
   type CreatedApiKey,
 } from "@furea/shared";
@@ -28,11 +30,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { apiKeysQuery, createApiKey, revokeApiKey } from "@/lib/api-keys";
-import { changePassword } from "@/lib/settings";
+import { changePassword, isWorkersDev, settingsQuery, updateSettings } from "@/lib/settings";
 
 export const Route = createFileRoute("/_authed/security")({
   component: SecurityPage,
@@ -47,6 +57,8 @@ function SecurityPage() {
     <div className="flex max-w-3xl flex-col gap-6">
       <h1 className="font-heading text-xl font-semibold">Security</h1>
       <PasswordSection />
+      {/* An Access application cannot be scoped to /admin on workers.dev, so the Worker refuses it there (ADR 0003). */}
+      {isWorkersDev(window.location.hostname) ? null : <AccessSection />}
       <section aria-labelledby="api-keys-heading" className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h2 id="api-keys-heading" className="font-heading font-semibold">
@@ -170,6 +182,147 @@ function PasswordSection() {
         </FieldGroup>
       </form>
     </section>
+  );
+}
+
+type AccessInput = z.input<typeof AccessSettingsRequest>;
+type AccessValues = z.output<typeof AccessSettingsRequest>;
+
+function AccessSection() {
+  const settings = useQuery(settingsQuery);
+  return (
+    <section aria-labelledby="access-heading" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="access-heading" className="font-heading font-semibold">
+          Cloudflare Access
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Access mode lets Cloudflare Access decide who the operator is, instead of the password. API keys keep working.
+        </p>
+      </div>
+      {settings.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : settings.isError ? (
+        <p className="text-sm text-destructive">Could not load the Access settings.</p>
+      ) : settings.data.access === null ? (
+        <EnableAccessForm />
+      ) : (
+        <AccessOn access={settings.data.access} />
+      )}
+    </section>
+  );
+}
+
+function EnableAccessForm() {
+  const form = useForm<AccessInput, unknown, AccessValues>({
+    resolver: zodResolver(AccessSettingsRequest),
+    defaultValues: { teamDomain: "", aud: "" },
+  });
+  const { errors, isSubmitting } = form.formState;
+
+  const onSubmit = form.handleSubmit(async (access) => {
+    try {
+      await updateSettings({ access });
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "access_unreachable") {
+        form.setError("teamDomain", { message: "Could not fetch this team's public keys. Check the team domain." });
+        return;
+      }
+      const fieldErrors = fieldDetails(error, ["access.teamDomain", "access.aud"] as const);
+      if (fieldErrors.length === 0) {
+        toast.error(error instanceof ApiError ? error.message : "Could not turn on Access mode. Try again.");
+        return;
+      }
+      for (const detail of fieldErrors) {
+        form.setError(detail.field === "access.aud" ? "aud" : "teamDomain", { message: detail.message });
+      }
+      return;
+    }
+    // The password session has just ended: a full navigation goes through the Access application.
+    window.location.assign("/admin/");
+  });
+
+  return (
+    <form onSubmit={onSubmit} noValidate>
+      <FieldGroup>
+        <Field data-invalid={errors.teamDomain ? true : undefined}>
+          <FieldLabel htmlFor="access-team-domain">Team domain</FieldLabel>
+          <Input
+            id="access-team-domain"
+            placeholder="myteam.cloudflareaccess.com"
+            autoComplete="off"
+            aria-invalid={errors.teamDomain ? true : undefined}
+            {...form.register("teamDomain")}
+          />
+          <FieldError errors={[errors.teamDomain]} />
+        </Field>
+        <Field data-invalid={errors.aud ? true : undefined}>
+          <FieldLabel htmlFor="access-aud">Application Audience (AUD) tag</FieldLabel>
+          <Input
+            id="access-aud"
+            autoComplete="off"
+            className="font-mono text-xs"
+            aria-invalid={errors.aud ? true : undefined}
+            {...form.register("aud")}
+          />
+          <FieldDescription>
+            Create the Access application for this hostname&apos;s <code>/admin</code> and <code>/api</code> first.
+            Turning Access mode on ends every password session; if Access then lets nobody in, turn it off with{" "}
+            <code>npx furea access disable</code>.
+          </FieldDescription>
+          <FieldError errors={[errors.aud]} />
+        </Field>
+        <Button type="submit" className="self-start" disabled={isSubmitting}>
+          {isSubmitting ? "Turning on…" : "Turn on Access mode"}
+        </Button>
+      </FieldGroup>
+    </form>
+  );
+}
+
+function AccessOn({ access }: { access: AccessSettings }) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const disable = useMutation({
+    mutationFn: () => updateSettings({ access: null }),
+    onSuccess: async () => {
+      setConfirming(false);
+      queryClient.clear();
+      toast.success("Access mode is off. Log in with the operator password.");
+      await navigate({ to: "/login" });
+    },
+    onError: () => toast.error("Could not turn off Access mode. Try again."),
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+        <dt className="text-muted-foreground">Team domain</dt>
+        <dd>{access.teamDomain}</dd>
+        <dt className="text-muted-foreground">AUD tag</dt>
+        <dd className="font-mono text-xs break-all">{access.aud}</dd>
+      </dl>
+      <Button variant="outline" className="self-start" onClick={() => setConfirming(true)}>
+        Turn off Access mode
+      </Button>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turn off Access mode?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The operator password becomes the way in again, and this Access sign-in no longer counts.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={disable.isPending} onClick={() => disable.mutate()}>
+              Turn off
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 

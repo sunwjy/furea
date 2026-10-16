@@ -14,11 +14,42 @@ const ReadOnly = (what: string) =>
     .refine(() => false, { message: `${what} is read-only.`, params: { code: "read_only_field" } })
     .describe(`Never accepted: ${what} is read-only (read_only_field).`);
 
+/** A team's own label under Cloudflare's Access domain: the only host the Worker fetches public keys from. */
+const TEAM_DOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
+const AUD_MAX_LENGTH = 256;
+
+/** Lowercased, with an `https://` in front or a `/` behind tolerated, since that is how the dashboard shows it. */
+export const AccessTeamDomain = z
+  .string()
+  .transform((value) => value.trim().toLowerCase().replace(/^https:\/\//, "").replace(/\/$/, ""))
+  .refine((value) => TEAM_DOMAIN.test(value), {
+    message: "Use the team domain, like myteam.cloudflareaccess.com.",
+    params: { code: "access_team_domain_invalid" },
+  })
+  .describe("The Zero Trust team domain, `<team>.cloudflareaccess.com`.");
+
+export const AccessAud = z
+  .string()
+  .trim()
+  .refine((value) => value.length > 0 && value.length <= AUD_MAX_LENGTH && !/\s/.test(value), {
+    message: "Use the Application Audience (AUD) tag of the Access application.",
+    params: { code: "access_aud_invalid" },
+  })
+  .describe("The Application Audience (AUD) tag of the Access application that guards /admin and /api.");
+
+export const AccessSettingsRequest = z.strictObject({ teamDomain: AccessTeamDomain, aud: AccessAud });
+
 /** `PATCH /settings`, a merge-patch: only the fields present change. */
 export const UpdateSettingsRequest = z.strictObject({
   rootDestination: Destination.nullable()
     .optional()
     .describe("Where the bare hostname redirects (302, not a click); null unsets it and / answers 404."),
+  access: AccessSettingsRequest.nullable()
+    .optional()
+    .describe(
+      "Turns Cloudflare Access mode on (session only, own domain only, the team's public keys must be reachable); " +
+        "null turns it off.",
+    ),
   analyticsConfigured: ReadOnly("analyticsConfigured").optional(),
   version: ReadOnly("version").optional(),
 });
@@ -26,6 +57,7 @@ export type UpdateSettingsRequest = Omit<z.input<typeof UpdateSettingsRequest>, 
 export type UpdateSettingsBody = Omit<z.output<typeof UpdateSettingsRequest>, "analyticsConfigured" | "version">;
 
 export const AccessSettings = z.object({ teamDomain: z.string(), aud: z.string() });
+export type AccessSettings = z.infer<typeof AccessSettings>;
 
 /** `GET /settings` and the answer to `PATCH /settings`. */
 export const Settings = z.object({

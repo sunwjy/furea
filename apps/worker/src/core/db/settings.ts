@@ -1,5 +1,7 @@
 // D1 access for the `settings` table: one row per instance setting (ADR 0003, ADR 0008, ADR 0009).
 
+import type { AccessConfig } from "../access.ts";
+
 export type SettingKey =
   /** The operator password in the `shared` hash format (ADR 0003). */
   | "operator_password_hash"
@@ -8,7 +10,10 @@ export type SettingKey =
   /** Where `/` redirects (ADR 0008); no row while it is unset. */
   | "root_destination"
   /** Present (value `1`) while the root destination's cache entry lags D1: the root's `cache_synced = 0`. */
-  | "root_destination_sync_pending";
+  | "root_destination_sync_pending"
+  /** Cloudflare Access mode (ADR 0003): both rows present while it is on, neither while it is off. */
+  | "access_team_domain"
+  | "access_aud";
 
 export async function getSetting(db: D1Database, key: SettingKey): Promise<string | null> {
   const row = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(key).first<{ value: string }>();
@@ -36,6 +41,33 @@ export async function getOrCreateSetting(db: D1Database, key: SettingKey, create
     .first<{ value: string }>();
   if (row === null) throw new Error(`setting ${key} was not written`);
   return row.value;
+}
+
+/** Access mode's settings, or `null` while it is off. */
+export async function getAccessConfig(db: D1Database): Promise<AccessConfig | null> {
+  const { results } = await db
+    .prepare("SELECT key, value FROM settings WHERE key IN ('access_team_domain', 'access_aud')")
+    .all<{ key: SettingKey; value: string }>();
+  const teamDomain = results.find((row) => row.key === "access_team_domain")?.value;
+  const aud = results.find((row) => row.key === "access_aud")?.value;
+  return teamDomain === undefined || aud === undefined ? null : { teamDomain, aud };
+}
+
+/**
+ * `null` turns Access mode off. Turning it on also deletes every session row: the password door closes, and a session
+ * left over from it must not come back to life if Access mode is turned off again later.
+ */
+export async function setAccessConfig(db: D1Database, config: AccessConfig | null): Promise<void> {
+  if (config === null) {
+    await db.prepare("DELETE FROM settings WHERE key IN ('access_team_domain', 'access_aud')").run();
+    return;
+  }
+  const upsert = "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value";
+  await db.batch([
+    db.prepare(upsert).bind("access_team_domain", config.teamDomain),
+    db.prepare(upsert).bind("access_aud", config.aud),
+    db.prepare("DELETE FROM sessions"),
+  ]);
 }
 
 export const getRootDestination = (db: D1Database) => getSetting(db, "root_destination");

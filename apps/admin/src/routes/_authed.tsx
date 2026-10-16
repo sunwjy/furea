@@ -26,6 +26,7 @@ function Shell() {
   const navigate = useNavigate();
 
   async function onLogout() {
+    const viaAccess = queryClient.getQueryData(sessionQuery.queryKey)?.kind === "access";
     try {
       await logout();
     } catch {
@@ -33,7 +34,9 @@ function Shell() {
       return;
     }
     queryClient.clear();
-    await navigate({ to: "/login" });
+    // An Access sign-in ends at Cloudflare Access, which clears its own cookie (ADR 0003).
+    if (viaAccess) window.location.assign("/cdn-cgi/access/logout");
+    else await navigate({ to: "/login" });
   }
 
   return (

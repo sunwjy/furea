@@ -194,3 +194,15 @@ test("7. set a root destination on the Settings page, land on it from /, and uns
   expect(unset.status()).toBe(404);
   expect(await unset.text()).toBe(await (await page.request.get("/no-such-link")).text());
 });
+
+test("8. see the Cloudflare Access form on the Security page and have a non-team domain refused", async () => {
+  // Turning Access mode on needs a real Access team's public keys, which E2E never fetches; the Worker side of
+  // Access mode is covered in the Workers pool with a stand-in team.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Security" }).click();
+  await expect(page.getByRole("heading", { name: "Cloudflare Access" })).toBeVisible();
+  await page.getByLabel("Team domain").fill("example.com");
+  await page.getByLabel("Application Audience (AUD) tag").fill("some-aud");
+  await page.getByRole("button", { name: "Turn on Access mode" }).click();
+  await expect(page.getByText("Use the team domain, like myteam.cloudflareaccess.com.")).toBeVisible();
+  expect(await (await page.request.get("/api/v1/auth/login")).json()).toEqual({ method: "password" });
+});

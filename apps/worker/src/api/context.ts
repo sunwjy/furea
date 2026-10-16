@@ -1,7 +1,7 @@
 import type { Scope } from "@furea/shared";
 import type { Env } from "../core/env.ts";
 
-/** Who is calling (ADR 0009, *Who may call what*). Access mode adds its own kind later. */
+/** Who is calling (ADR 0009, *Who may call what*). */
 export interface SessionCaller {
   kind: "session";
   scope: Scope;
@@ -15,7 +15,14 @@ export interface ApiKeyCaller {
   apiKey: { id: string; name: string };
 }
 
-export type Caller = SessionCaller | ApiKeyCaller;
+/** The operator, signed in through Cloudflare Access (ADR 0003): a valid Access JWT is the operator session. */
+export interface AccessCaller {
+  kind: "access";
+  scope: Scope;
+  email: string | null;
+}
+
+export type Caller = SessionCaller | AccessCaller | ApiKeyCaller;
 
 export interface ApiEnv {
   Bindings: Env;

@@ -130,7 +130,7 @@ describe("PATCH /api/v1/settings", () => {
       rootDestination: "https://s.example.com/loop",
       analyticsConfigured: true,
       version: "9.9.9",
-      access: null,
+      theme: "dark",
     });
 
     expect(res.status).toBe(400);
@@ -140,7 +140,7 @@ describe("PATCH /api/v1/settings", () => {
         { field: "rootDestination", code: "destination_self" },
         { field: "analyticsConfigured", code: "read_only_field" },
         { field: "version", code: "read_only_field" },
-        { field: "access", code: "unknown_field" },
+        { field: "theme", code: "unknown_field" },
       ],
     });
     expect(await getSetting(env.DB, "root_destination")).toBeNull();

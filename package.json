@@ -9,12 +9,17 @@
     "build": "turbo run build",
     "lint": "oxlint",
     "typecheck": "turbo run typecheck",
-    "test": "oxlint && turbo run build typecheck test",
-    "test:e2e": "turbo run test:e2e"
+    "test": "oxlint && pnpm test:scripts && turbo run build typecheck test",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
+    "test:e2e": "turbo run test:e2e",
+    "test:compat": "node scripts/check-expand-only.mjs"
   },
   "devDependencies": {
+    "@furea/shared": "workspace:*",
+    "miniflare": "5.20261001.0-alpha",
     "oxlint": "^1.86.0",
     "turbo": "^2.11.7",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^4.147.0"
   }
 }

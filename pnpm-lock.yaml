@@ -8,6 +8,12 @@ importers:
 
   .:
     devDependencies:
+      '@furea/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      miniflare:
+        specifier: 5.20261001.0-alpha
+        version: 5.20261001.0-alpha(@types/node@26.6.4)
       oxlint:
         specifier: ^1.86.0
         version: 1.86.0
@@ -17,6 +23,9 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      wrangler:
+        specifier: ^4.147.0
+        version: 4.147.0(@cloudflare/workers-types@5.20261003.1)(@types/node@26.6.4)
 
   apps/admin:
     dependencies:

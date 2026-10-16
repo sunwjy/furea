@@ -1,0 +1,46 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_9",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/settings",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "success": false,
+          "errors": [
+            {
+              "code": 10007,
+              "message": "This Worker does not exist on your account."
+            }
+          ],
+          "messages": [],
+          "result": null
+        }
+      }
+    }
+  ]
+}

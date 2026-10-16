@@ -74,6 +74,15 @@ export interface ScriptSubdomain {
   previews_enabled?: boolean;
 }
 
+/** A Workers Custom Domain attached to a script. */
+export interface WorkerDomain {
+  id: string;
+  hostname: string;
+  service: string;
+  zone_id?: string;
+  zone_name?: string;
+}
+
 export interface CloudflareClientOptions {
   token: string;
   fetch: typeof fetch;
@@ -243,5 +252,29 @@ export class CloudflareClient {
 
   async putSecret(accountId: string, script: string, name: string, text: string): Promise<void> {
     await this.request("PUT", `/accounts/${accountId}/workers/scripts/${script}/secrets`, { name, text, type: "secret_text" });
+  }
+
+  // Instance management: `access`, `destroy` (ADR 0006 *Command surface*).
+
+  /** The Custom Domains attached to the script; empty on a workers.dev-only instance. */
+  listWorkerDomains(accountId: string, script: string): Promise<WorkerDomain[]> {
+    return this.request<WorkerDomain[]>("GET", `/accounts/${accountId}/workers/domains?service=${encodeURIComponent(script)}`);
+  }
+
+  async deleteWorkerDomain(accountId: string, domainId: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/workers/domains/${domainId}`);
+  }
+
+  /** Its secrets, schedules and workers.dev route go with it. */
+  async deleteScript(accountId: string, script: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/workers/scripts/${script}`);
+  }
+
+  async deleteKvNamespace(accountId: string, namespaceId: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${namespaceId}`);
+  }
+
+  async deleteD1Database(accountId: string, databaseId: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/d1/database/${databaseId}`);
   }
 }

@@ -57,11 +57,14 @@ export async function resolveAccount(client: CloudflareClient, io: Io, given: st
 /**
  * Verifies on the endpoint the prefix suggests (`cfat_` is account-owned), retrying once on the other
  * endpoint after a `401`, because the prefix is a convention, not a contract. Never calls `/user` or `/memberships`.
+ * `client` must carry `token`.
  */
-export async function verifyDeployToken(client: CloudflareClient, token: string, accountId: string): Promise<void> {
+export async function verifyToken(client: CloudflareClient, token: string, accountId: string, what: TokenRole): Promise<void> {
   const byAccount = () => client.verifyAccountToken(accountId);
   const byUser = () => client.verifyUserToken();
   const [first, second] = token.startsWith("cfat_") ? [byAccount, byUser] : [byUser, byAccount];
+  const rejected = (error: unknown): unknown =>
+    error instanceof CloudflareApiError ? new CliError(`Cloudflare rejected the ${ROLE_NAMES[what].rejected}: ${error.message}`) : error;
   let status: string;
   try {
     status = (await first()).status;
@@ -73,9 +76,16 @@ export async function verifyDeployToken(client: CloudflareClient, token: string,
       throw rejected(retryError);
     }
   }
-  if (status !== "active") throw new CliError(`The deploy token is ${status}, not active.`);
+  if (status !== "active") throw new CliError(`The ${ROLE_NAMES[what].status} is ${status}, not active.`);
 }
 
-function rejected(error: unknown): unknown {
-  return error instanceof CloudflareApiError ? new CliError(`Cloudflare rejected the token: ${error.message}`) : error;
+export type TokenRole = "deploy" | "analytics";
+
+const ROLE_NAMES: Record<TokenRole, { rejected: string; status: string }> = {
+  deploy: { rejected: "token", status: "deploy token" },
+  analytics: { rejected: "analytics token", status: "analytics token" },
+};
+
+export function verifyDeployToken(client: CloudflareClient, token: string, accountId: string): Promise<void> {
+  return verifyToken(client, token, accountId, "deploy");
 }

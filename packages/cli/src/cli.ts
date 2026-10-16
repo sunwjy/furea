@@ -3,8 +3,12 @@
 
 import { parseArgs } from "node:util";
 import { CloudflareApiError } from "./cloudflare/client.ts";
+import { accessDisable, accessEnable } from "./commands/access.ts";
+import { analyticsToken } from "./commands/analytics-token.ts";
+import { destroy } from "./commands/destroy.ts";
 import { deploy } from "./commands/deploy.ts";
 import { login, logout } from "./commands/login.ts";
+import { resetPassword } from "./commands/reset-password.ts";
 import type { CommandContext } from "./context.ts";
 import { CredentialsFile } from "./credentials.ts";
 import { CliError, type Io } from "./io.ts";
@@ -41,7 +45,12 @@ Commands:
   deploy (default)   Install or upgrade an instance (--workers-subdomain <name>, --allow-downgrade)
   login              Store a deploy token (--account-token opens the account-owned token form)
   logout             Remove a stored deploy token
-  status, logs, domain, analytics-token, reset-password, access, destroy`;
+  analytics-token    Store the read-only analytics token (FUREA_ANALYTICS_TOKEN; --account-token for the account-owned form)
+  reset-password     Replace the operator password and sign out every session
+  access enable      Turn Cloudflare Access mode on (--team-domain <team>.cloudflareaccess.com, --aud <tag>); own domain only
+  access disable     Turn Cloudflare Access mode off
+  destroy            Delete the instance (--confirm <name> without a terminal, --keep-database)
+  status, logs, domain`;
 
 /** Runs one CLI invocation and returns its exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
@@ -57,6 +66,10 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         "account-token": { type: "boolean", default: false },
         "workers-subdomain": { type: "string" },
         "allow-downgrade": { type: "boolean", default: false },
+        "team-domain": { type: "string" },
+        aud: { type: "string" },
+        "keep-database": { type: "boolean", default: false },
+        confirm: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
         version: { type: "boolean", short: "v", default: false },
       },
@@ -95,6 +108,22 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         return 0;
       case "logout":
         await logout(ctx);
+        return 0;
+      case "analytics-token":
+        await analyticsToken(ctx, { accountToken: values["account-token"] });
+        return 0;
+      case "access": {
+        const action = positionals[1];
+        if (action === "enable") await accessEnable(ctx, { teamDomain: values["team-domain"], aud: values.aud });
+        else if (action === "disable") await accessDisable(ctx);
+        else throw new CliError(`Use: furea access enable [--team-domain <team>.cloudflareaccess.com] [--aud <tag>], or furea access disable.`);
+        return 0;
+      }
+      case "destroy":
+        await destroy(ctx, { keepDatabase: values["keep-database"], confirm: values.confirm });
+        return 0;
+      case "reset-password":
+        await resetPassword(ctx);
         return 0;
       default:
         throw new CliError(`furea ${packageVersion()}: "${command}" is not implemented yet.`);

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./access": "./src/access.ts",
     "./password": "./src/password.ts",
     "./slug": "./src/slug.ts"
   },

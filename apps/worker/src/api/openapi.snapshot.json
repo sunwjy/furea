@@ -435,6 +435,313 @@
         }
       }
     },
+    "/campaigns": {
+      "post": {
+        "summary": "Create a campaign. utmCampaign defaults to the trimmed name. The base URL follows the destination rules, must carry no utm_* parameter (base_url_has_utm) and is screened (422 destination_flagged); a session may send screening: \"skip\". 409 campaign_name_taken when another campaign has the name, ignoring case.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCampaignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created campaign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "get": {
+        "summary": "List campaigns, newest first (createdAt desc, id desc), cursor-paginated; q matches the name and the UTM campaign. The aggregates are computed from the links.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Plain substring of the name or the UTM campaign.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of campaigns.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/campaigns/{id}": {
+      "get": {
+        "summary": "Read one campaign.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The campaign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit a campaign as a merge-patch: name. The aggregates are read-only. 409 campaign_name_taken when another campaign has the name, ignoring case.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCampaignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The edited campaign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatedCampaign"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a campaign. Its links are detached, never deleted or disabled.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted; its links are plain links now."
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/campaigns/{id}/links": {
+      "get": {
+        "summary": "Every link of the campaign, oldest first (createdAt asc, slug asc), unpaginated.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The campaign's links.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignLinks"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create links in the campaign, all or nothing; the only way to create a campaign link. Each destination is composed from the campaign and the item's utm. Every failing item is reported in one 400 validation_failed (slug_taken, utm_combination_taken with conflictsWith, destination_invalid); 409 campaign_link_limit past 50 links; the base URL's host is screened once (422 destination_flagged).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCreateCampaignLinksRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created links, in request order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignLinks"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/settings": {
       "get": {
         "summary": "The instance settings: the root destination, Access mode and read-only instance facts.",
@@ -669,6 +976,78 @@
       }
     },
     "schemas": {
+      "BulkCreateCampaignLinksRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "utm": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "utm_source, trimmed, case kept."
+                    },
+                    "medium": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "utm_medium, trimmed, case kept."
+                    },
+                    "content": {
+                      "description": "utm_content; empty or null for none.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "term": {
+                      "description": "utm_term; empty or null for none.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "medium"
+                  ],
+                  "additionalProperties": false
+                },
+                "slug": {
+                  "type": "string",
+                  "description": "A custom slug: 1 to 64 of A-Z a-z 0-9 - _, case-sensitive, never normalised; not a reserved path (admin, api, favicon.ico, robots.txt, or a leading _ or ., in any case). Omit it for a generated slug."
+                },
+                "title": {
+                  "description": "Trimmed, at most 200 characters; empty or null means no title.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "utm"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "properties": {
@@ -709,6 +1088,42 @@
         "required": [
           "name",
           "scope"
+        ],
+        "additionalProperties": false
+      },
+      "CreateCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Trimmed, 1 to 100 characters, unique across the instance ignoring case (campaign_name_taken)."
+          },
+          "baseUrl": {
+            "type": "string",
+            "description": "Where every link of the campaign lands before its UTM parameters are added: a destination without utm_* parameters (base_url_has_utm)."
+          },
+          "utmCampaign": {
+            "description": "The utm_campaign every link carries; omitted or empty, it is the trimmed name, case kept.",
+            "type": "string"
+          },
+          "utmId": {
+            "description": "The optional utm_id every link carries; empty or null for none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
+          }
+        },
+        "required": [
+          "name",
+          "baseUrl"
         ],
         "additionalProperties": false
       },
@@ -753,6 +1168,30 @@
         "required": [
           "password"
         ],
+        "additionalProperties": false
+      },
+      "UpdateCampaignRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Trimmed, 1 to 100 characters, unique across the instance ignoring case (campaign_name_taken)."
+          },
+          "linkCount": {
+            "description": "Never accepted: linkCount is computed from the links (read_only_field)."
+          },
+          "enabledLinkCount": {
+            "description": "Never accepted: enabledLinkCount is computed from the links (read_only_field)."
+          },
+          "clickCount": {
+            "description": "Never accepted: clickCount is computed from the links (read_only_field)."
+          },
+          "syncPendingLinkCount": {
+            "description": "Never accepted: syncPendingLinkCount is computed from the links (read_only_field)."
+          }
+        },
         "additionalProperties": false
       },
       "UpdateLinkRequest": {
@@ -861,6 +1300,107 @@
         "items": {
           "$ref": "#/components/schemas/ApiKey"
         }
+      },
+      "Campaign": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "utmCampaign": {
+            "type": "string"
+          },
+          "utmId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "linkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "enabledLinkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "clickCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "syncPendingLinkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "utmCampaign",
+          "utmId",
+          "baseUrl",
+          "linkCount",
+          "enabledLinkCount",
+          "clickCount",
+          "syncPendingLinkCount",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CampaignLinks": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CampaignPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Campaign"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
       },
       "CreatedApiKey": {
         "type": "object",
@@ -1391,6 +1931,78 @@
           "analyticsConfigured",
           "analyticsMissing",
           "version"
+        ]
+      },
+      "UpdatedCampaign": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "utmCampaign": {
+            "type": "string"
+          },
+          "utmId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "linkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "enabledLinkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "clickCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "syncPendingLinkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "rewrittenLinkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "utmCampaign",
+          "utmId",
+          "baseUrl",
+          "linkCount",
+          "enabledLinkCount",
+          "clickCount",
+          "syncPendingLinkCount",
+          "createdAt",
+          "updatedAt",
+          "rewrittenLinkCount"
         ]
       }
     },

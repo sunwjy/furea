@@ -25,6 +25,7 @@ describe("links", () => {
       enabled: 1,
       click_count: 0,
       cache_synced: 1,
+      campaign_id: null,
       created_at: "2026-10-04T01:02:03.004Z",
       updated_at: "2026-10-04T01:02:03.004Z",
     });
@@ -84,6 +85,7 @@ describe("updateLink", () => {
       enabled: 0,
       click_count: 0,
       cache_synced: 1,
+      campaign_id: null,
       created_at: created.toISOString(),
       updated_at: edited.toISOString(),
     });

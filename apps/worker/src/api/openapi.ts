@@ -4,7 +4,12 @@
 import {
   ApiKey,
   ApiKeyList,
+  BulkCreateCampaignLinksRequest,
+  Campaign,
+  CampaignLinks,
+  CampaignPage,
   ChangePasswordRequest,
+  CreateCampaignRequest,
   CreateApiKeyRequest,
   CreatedApiKey,
   CreateLinkRequest,
@@ -14,12 +19,15 @@ import {
   Link,
   LinkPage,
   LinkStats,
+  ListCampaignsQuery,
   ListLinksQuery,
   LoginMethodResponse,
   LoginRequest,
   SessionResponse,
   Settings,
   StatsQuery,
+  UpdateCampaignRequest,
+  UpdatedCampaign,
   UpdateLinkRequest,
   UpdateSettingsRequest,
 } from "@furea/shared";
@@ -65,6 +73,7 @@ function queryParameters(schema: z.ZodObject): JsonSchema[] {
 }
 
 const SLUG_PARAMETER = { name: "slug", in: "path", required: true, schema: { type: "string" } };
+const CAMPAIGN_ID_PARAMETER = { name: "id", in: "path", required: true, schema: { type: "string" } };
 
 const json = (schema: JsonSchema) => ({ content: { "application/json": { schema } } });
 
@@ -193,6 +202,75 @@ const OPERATIONS: Operation[] = [
     errors: [401, 403, 404],
   },
   {
+    method: "post",
+    path: "/campaigns",
+    summary:
+      "Create a campaign. utmCampaign defaults to the trimmed name. The base URL follows the destination rules, " +
+      "must carry no utm_* parameter (base_url_has_utm) and is screened (422 destination_flagged); a session may " +
+      "send screening: \"skip\". 409 campaign_name_taken when another campaign has the name, ignoring case.",
+    body: "CreateCampaignRequest",
+    success: { status: 201, description: "The created campaign.", schema: "Campaign" },
+    errors: [...BODY_ERRORS, 401, 403, 409, 422],
+  },
+  {
+    method: "get",
+    path: "/campaigns",
+    summary:
+      "List campaigns, newest first (createdAt desc, id desc), cursor-paginated; q matches the name and the UTM " +
+      "campaign. The aggregates are computed from the links.",
+    parameters: queryParameters(ListCampaignsQuery),
+    success: { status: 200, description: "One page of campaigns.", schema: "CampaignPage" },
+    errors: [400, 401],
+  },
+  {
+    method: "get",
+    path: "/campaigns/{id}",
+    summary: "Read one campaign.",
+    parameters: [CAMPAIGN_ID_PARAMETER],
+    success: { status: 200, description: "The campaign.", schema: "Campaign" },
+    errors: [401, 404],
+  },
+  {
+    method: "patch",
+    path: "/campaigns/{id}",
+    summary:
+      "Edit a campaign as a merge-patch: name. The aggregates are read-only. 409 campaign_name_taken when another " +
+      "campaign has the name, ignoring case.",
+    parameters: [CAMPAIGN_ID_PARAMETER],
+    body: "UpdateCampaignRequest",
+    success: { status: 200, description: "The edited campaign.", schema: "UpdatedCampaign" },
+    errors: [...BODY_ERRORS, 401, 403, 404, 409],
+  },
+  {
+    method: "delete",
+    path: "/campaigns/{id}",
+    summary: "Delete a campaign. Its links are detached, never deleted or disabled.",
+    parameters: [CAMPAIGN_ID_PARAMETER],
+    success: { status: 204, description: "Deleted; its links are plain links now." },
+    errors: [401, 403, 404],
+  },
+  {
+    method: "get",
+    path: "/campaigns/{id}/links",
+    summary: "Every link of the campaign, oldest first (createdAt asc, slug asc), unpaginated.",
+    parameters: [CAMPAIGN_ID_PARAMETER],
+    success: { status: 200, description: "The campaign's links.", schema: "CampaignLinks" },
+    errors: [401, 404],
+  },
+  {
+    method: "post",
+    path: "/campaigns/{id}/links",
+    summary:
+      "Create links in the campaign, all or nothing; the only way to create a campaign link. Each destination is " +
+      "composed from the campaign and the item's utm. Every failing item is reported in one 400 " +
+      "validation_failed (slug_taken, utm_combination_taken with conflictsWith, destination_invalid); 409 " +
+      "campaign_link_limit past 50 links; the base URL's host is screened once (422 destination_flagged).",
+    parameters: [CAMPAIGN_ID_PARAMETER],
+    body: "BulkCreateCampaignLinksRequest",
+    success: { status: 201, description: "The created links, in request order.", schema: "CampaignLinks" },
+    errors: [...BODY_ERRORS, 401, 403, 404, 409, 422],
+  },
+  {
     method: "get",
     path: "/settings",
     summary: "The instance settings: the root destination, Access mode and read-only instance facts.",
@@ -282,16 +360,22 @@ export function buildOpenApiDocument(version: string): JsonSchema {
       },
       schemas: {
         ...components("input", {
+          BulkCreateCampaignLinksRequest,
           ChangePasswordRequest,
           CreateApiKeyRequest,
+          CreateCampaignRequest,
           CreateLinkRequest,
           LoginRequest,
+          UpdateCampaignRequest,
           UpdateLinkRequest,
           UpdateSettingsRequest,
         }),
         ...components("output", {
           ApiKey,
           ApiKeyList,
+          Campaign,
+          CampaignLinks,
+          CampaignPage,
           CreatedApiKey,
           ErrorDetail,
           ErrorEnvelope,
@@ -302,6 +386,7 @@ export function buildOpenApiDocument(version: string): JsonSchema {
           LoginMethodResponse,
           SessionResponse,
           Settings,
+          UpdatedCampaign,
         }),
       },
       responses: {

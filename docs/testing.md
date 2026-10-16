@@ -75,7 +75,7 @@ No component tests in v1: the screens were validated by the admin-UI prototype a
   6. See the link's lifetime total (the clicks of flow 3) on its feed card ([#48](https://github.com/sunwjy/furea/issues/48)).
   7. Set a root destination on the Settings page, get the 302 from `/`, unset it and get the 404 ([#46](https://github.com/sunwjy/furea/issues/46)).
   8. Open the stats page and see the "estimates unavailable" state, with no analytics token ([#49](https://github.com/sunwjy/furea/issues/49)).
-  - Still to come: create a campaign, add two links in the row editor, open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
+  9. Create a campaign, add two links in the row editor (one typed, one pasted from a spreadsheet), open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
 - The UTM builder's two-way sync is left to the `shared` golden vectors.
 - `globalSetup` prepares the local instance: `wrangler d1 migrations apply --local`, then inserts the operator password row with `wrangler d1 execute --local`, the hash computed in Node with the `shared` hashing function. Then it starts `wrangler dev` and waits for the port.
 - Budget: the whole spec should stay under about 30 seconds; if it grows past a handful of flows, split by screen rather than by step.

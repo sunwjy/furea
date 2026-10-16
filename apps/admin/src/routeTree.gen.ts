@@ -12,11 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
-import { Route as AuthedCampaignsRouteImport } from './routes/_authed/campaigns'
 import { Route as AuthedNewRouteImport } from './routes/_authed/new'
 import { Route as AuthedSecurityRouteImport } from './routes/_authed/security'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
+import { Route as AuthedCampaignsIndexRouteImport } from './routes/_authed/campaigns.index'
+import { Route as AuthedCampaignsNewRouteImport } from './routes/_authed/campaigns.new'
 import { Route as AuthedLinksSlugRouteImport } from './routes/_authed/links.$slug'
+import { Route as AuthedCampaignsIdIndexRouteImport } from './routes/_authed/campaigns.$id.index'
+import { Route as AuthedCampaignsIdAddRouteImport } from './routes/_authed/campaigns.$id.add'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -30,11 +33,6 @@ const LoginRoute = LoginRouteImport.update({
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedCampaignsRoute = AuthedCampaignsRouteImport.update({
-  id: '/campaigns',
-  path: '/campaigns',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedNewRoute = AuthedNewRouteImport.update({
@@ -52,70 +50,108 @@ const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedCampaignsIndexRoute = AuthedCampaignsIndexRouteImport.update({
+  id: '/campaigns/',
+  path: '/campaigns/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedCampaignsNewRoute = AuthedCampaignsNewRouteImport.update({
+  id: '/campaigns/new',
+  path: '/campaigns/new',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedLinksSlugRoute = AuthedLinksSlugRouteImport.update({
   id: '/links/$slug',
   path: '/links/$slug',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedCampaignsIdIndexRoute = AuthedCampaignsIdIndexRouteImport.update({
+  id: '/campaigns/$id/',
+  path: '/campaigns/$id/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedCampaignsIdAddRoute = AuthedCampaignsIdAddRouteImport.update({
+  id: '/campaigns/$id/add',
+  path: '/campaigns/$id/add',
   getParentRoute: () => AuthedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
-  '/campaigns': typeof AuthedCampaignsRoute
   '/new': typeof AuthedNewRoute
   '/security': typeof AuthedSecurityRoute
   '/settings': typeof AuthedSettingsRoute
+  '/campaigns/new': typeof AuthedCampaignsNewRoute
   '/links/$slug': typeof AuthedLinksSlugRoute
+  '/campaigns/': typeof AuthedCampaignsIndexRoute
+  '/campaigns/$id/add': typeof AuthedCampaignsIdAddRoute
+  '/campaigns/$id/': typeof AuthedCampaignsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/campaigns': typeof AuthedCampaignsRoute
   '/new': typeof AuthedNewRoute
   '/security': typeof AuthedSecurityRoute
   '/settings': typeof AuthedSettingsRoute
   '/': typeof AuthedIndexRoute
+  '/campaigns/new': typeof AuthedCampaignsNewRoute
   '/links/$slug': typeof AuthedLinksSlugRoute
+  '/campaigns': typeof AuthedCampaignsIndexRoute
+  '/campaigns/$id/add': typeof AuthedCampaignsIdAddRoute
+  '/campaigns/$id': typeof AuthedCampaignsIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authed/campaigns': typeof AuthedCampaignsRoute
   '/_authed/new': typeof AuthedNewRoute
   '/_authed/security': typeof AuthedSecurityRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/campaigns/new': typeof AuthedCampaignsNewRoute
   '/_authed/links/$slug': typeof AuthedLinksSlugRoute
+  '/_authed/campaigns/': typeof AuthedCampaignsIndexRoute
+  '/_authed/campaigns/$id/add': typeof AuthedCampaignsIdAddRoute
+  '/_authed/campaigns/$id/': typeof AuthedCampaignsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/login'
-    | '/campaigns'
     | '/new'
     | '/security'
     | '/settings'
+    | '/campaigns/new'
     | '/links/$slug'
+    | '/campaigns/'
+    | '/campaigns/$id/add'
+    | '/campaigns/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
-    | '/campaigns'
     | '/new'
     | '/security'
     | '/settings'
     | '/'
+    | '/campaigns/new'
     | '/links/$slug'
+    | '/campaigns'
+    | '/campaigns/$id/add'
+    | '/campaigns/$id'
   id:
     | '__root__'
     | '/_authed'
     | '/login'
-    | '/_authed/campaigns'
     | '/_authed/new'
     | '/_authed/security'
     | '/_authed/settings'
     | '/_authed/'
+    | '/_authed/campaigns/new'
     | '/_authed/links/$slug'
+    | '/_authed/campaigns/'
+    | '/_authed/campaigns/$id/add'
+    | '/_authed/campaigns/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -146,13 +182,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/campaigns': {
-      id: '/_authed/campaigns'
-      path: '/campaigns'
-      fullPath: '/campaigns'
-      preLoaderRoute: typeof AuthedCampaignsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/new': {
       id: '/_authed/new'
       path: '/new'
@@ -174,6 +203,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/campaigns/': {
+      id: '/_authed/campaigns/'
+      path: '/campaigns'
+      fullPath: '/campaigns/'
+      preLoaderRoute: typeof AuthedCampaignsIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/campaigns/new': {
+      id: '/_authed/campaigns/new'
+      path: '/campaigns/new'
+      fullPath: '/campaigns/new'
+      preLoaderRoute: typeof AuthedCampaignsNewRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/links/$slug': {
       id: '/_authed/links/$slug'
       path: '/links/$slug'
@@ -181,25 +224,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedLinksSlugRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/campaigns/$id/': {
+      id: '/_authed/campaigns/$id/'
+      path: '/campaigns/$id'
+      fullPath: '/campaigns/$id/'
+      preLoaderRoute: typeof AuthedCampaignsIdIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/campaigns/$id/add': {
+      id: '/_authed/campaigns/$id/add'
+      path: '/campaigns/$id/add'
+      fullPath: '/campaigns/$id/add'
+      preLoaderRoute: typeof AuthedCampaignsIdAddRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
 interface AuthedRouteChildren {
-  AuthedCampaignsRoute: typeof AuthedCampaignsRoute
   AuthedNewRoute: typeof AuthedNewRoute
   AuthedSecurityRoute: typeof AuthedSecurityRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedCampaignsNewRoute: typeof AuthedCampaignsNewRoute
   AuthedLinksSlugRoute: typeof AuthedLinksSlugRoute
+  AuthedCampaignsIndexRoute: typeof AuthedCampaignsIndexRoute
+  AuthedCampaignsIdAddRoute: typeof AuthedCampaignsIdAddRoute
+  AuthedCampaignsIdIndexRoute: typeof AuthedCampaignsIdIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedCampaignsRoute: AuthedCampaignsRoute,
   AuthedNewRoute: AuthedNewRoute,
   AuthedSecurityRoute: AuthedSecurityRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedCampaignsNewRoute: AuthedCampaignsNewRoute,
   AuthedLinksSlugRoute: AuthedLinksSlugRoute,
+  AuthedCampaignsIndexRoute: AuthedCampaignsIndexRoute,
+  AuthedCampaignsIdAddRoute: AuthedCampaignsIdAddRoute,
+  AuthedCampaignsIdIndexRoute: AuthedCampaignsIdIndexRoute,
 }
 
 const AuthedRouteWithChildren =

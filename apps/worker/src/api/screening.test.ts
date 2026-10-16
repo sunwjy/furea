@@ -1,6 +1,6 @@
 // Destination screening on the writes that set a destination (ADR 0013), against the canned resolver of test/doh.ts.
 
-import { CreatedApiKey, Link } from "@furea/shared";
+import { Campaign, CreatedApiKey, Link } from "@furea/shared";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { doh } from "../../test/doh.ts";
@@ -196,6 +196,68 @@ describe("PATCH /api/v1/settings", () => {
     const res = await api("PATCH", "/settings", { rootDestination: "https://any.example/" });
     expect(res.status).toBe(200);
     expect(logged(error, "screening_unavailable")).toEqual([{ event: "screening_unavailable", slug: "_" }]);
+  });
+});
+
+describe("POST /api/v1/campaigns", () => {
+  it("refuses a flagged base URL naming baseUrl, and creates no campaign", async () => {
+    doh.flag("bad.example");
+    const res = await api("POST", "/campaigns", { name: "Scr flagged", baseUrl: "https://bad.example/spring" });
+    expect(await flaggedDetails(res)).toEqual([{ field: "baseUrl", host: "bad.example", code: "destination_flagged" }]);
+    const page = (await (await api("GET", "/campaigns?q=Scr%20flagged")).json()) as { items: unknown[] };
+    expect(page.items).toEqual([]);
+  });
+
+  it("creates it with the session override and logs screening_overridden with the campaign id", async () => {
+    doh.flag("bad.example");
+    const res = await api("POST", "/campaigns", { name: "Scr skip", baseUrl: "https://bad.example/", screening: "skip" });
+    expect(res.status).toBe(201);
+    const { id } = Campaign.parse(await res.json());
+    expect(logged(warn, "screening_overridden")).toEqual([{ event: "screening_overridden", campaign: id }]);
+  });
+
+  it("refuses the override from an API key", async () => {
+    const body = { name: "Scr key", baseUrl: "https://ok.example/", screening: "skip" };
+    expect((await api("POST", "/campaigns", body, { bearer: writeKey })).status).toBe(403);
+  });
+});
+
+describe("POST /api/v1/campaigns/:id/links", () => {
+  async function campaignOn(name: string, baseUrl: string): Promise<string> {
+    const res = await api("POST", "/campaigns", { name, baseUrl });
+    expect(res.status).toBe(201);
+    return Campaign.parse(await res.json()).id;
+  }
+
+  const items = [
+    { utm: { source: "a", medium: "m" }, slug: "scr-bulk-a" },
+    { utm: { source: "b", medium: "m" }, slug: "scr-bulk-b" },
+  ];
+
+  it("looks the base URL's host up once for all items", async () => {
+    const id = await campaignOn("Scr bulk clean", "https://shared.example/");
+    doh.reset();
+    expect((await api("POST", `/campaigns/${id}/links`, { items })).status).toBe(201);
+    expect(doh.lookups).toEqual(["shared.example"]);
+  });
+
+  it("refuses the whole request when the host is flagged since, creating nothing", async () => {
+    const id = await campaignOn("Scr bulk flagged", "https://turns.example/");
+    doh.flag("turns.example");
+    const res = await api("POST", `/campaigns/${id}/links`, {
+      items: [{ utm: { source: "a", medium: "m" }, slug: "scr-bulk-c" }],
+    });
+    expect(await flaggedDetails(res)).toEqual([{ field: "baseUrl", host: "turns.example", code: "destination_flagged" }]);
+    expect((await api("GET", "/links/scr-bulk-c")).status).toBe(404);
+  });
+
+  it("creates them with the session override, logging each slug, and refuses the override from an API key", async () => {
+    const id = await campaignOn("Scr bulk skip", "https://turns2.example/");
+    doh.flag("turns2.example");
+    const body = { items: [{ utm: { source: "a", medium: "m" }, slug: "scr-bulk-d" }], screening: "skip" };
+    expect((await api("POST", `/campaigns/${id}/links`, body, { bearer: writeKey })).status).toBe(403);
+    expect((await api("POST", `/campaigns/${id}/links`, body)).status).toBe(201);
+    expect(logged(warn, "screening_overridden")).toEqual([{ event: "screening_overridden", slug: "scr-bulk-d" }]);
   });
 });
 

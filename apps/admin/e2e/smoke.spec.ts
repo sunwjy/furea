@@ -226,3 +226,50 @@ test("8. open the stats page and see the estimates unavailable state, with no an
   await expect(page.getByRole("list", { name: "Links" })).toBeVisible();
   await expect(hint).toHaveCount(0);
 });
+
+test("9. create a campaign, add two links in the row editor, and land on a composed destination", async () => {
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Campaigns" }).click();
+  await expect(page.getByText("No campaigns yet.", { exact: false })).toBeVisible();
+  await page.getByRole("link", { name: "New campaign" }).click();
+  await expect(page.getByRole("heading", { name: "New campaign" })).toBeVisible();
+
+  const baseUrl = `http://127.0.0.1:${PORT}/robots.txt?from=campaign#top`;
+  await page.getByLabel("Name").fill("E2E Spring");
+  await page.getByLabel("Base URL").fill(baseUrl);
+  // The UTM campaign follows the name until edited.
+  await expect(page.getByLabel("UTM campaign")).toHaveValue("E2E Spring");
+  await page.getByRole("button", { name: "Create and add links" }).click();
+
+  // Straight on to the row editor; one row typed, one pasted from a spreadsheet.
+  await expect(page.getByRole("heading", { name: "Add links to E2E Spring" })).toBeVisible();
+  await page.getByLabel("Row 1 Source").fill("Newsletter");
+  await page.getByLabel("Row 1 Medium").fill("email");
+  await page.getByLabel("Row 1 Custom slug").fill("e2e-spring-news");
+  await page.getByRole("button", { name: "Paste from spreadsheet…" }).click();
+  await page.getByLabel(/^Paste rows/).fill("source\tmedium\tcontent\ninstagram\tsocial\tstory a\n");
+  await page.getByRole("button", { name: "Add rows" }).click();
+  await expect(page.getByLabel("Row 2 Content")).toHaveValue("story a");
+  await page.getByRole("button", { name: "Create 2 links" }).click();
+
+  // The campaign page: header and the links table with their UTM values.
+  await expect(page.getByRole("heading", { name: "E2E Spring" })).toBeVisible();
+  const table = page.getByRole("table", { name: "Links" });
+  await expect(table.getByRole("row")).toHaveCount(3);
+  const news = table.getByRole("row").filter({ hasText: "/e2e-spring-news" });
+  await expect(news.getByRole("cell")).toHaveText(["/e2e-spring-news", "Newsletter", "email", "—", "—", "0"]);
+  await expect(table.getByRole("row").filter({ hasText: "instagram" })).toContainText("story a");
+
+  const composed =
+    `http://127.0.0.1:${PORT}/robots.txt?from=campaign` +
+    "&utm_source=Newsletter&utm_medium=email&utm_campaign=E2E%20Spring#top";
+  const res = await page.request.get("/e2e-spring-news", { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
+  expect(res.headers()["location"]).toBe(composed);
+  await page.goto("/e2e-spring-news");
+  await expect(page).toHaveURL(composed);
+
+  // The list shows the campaign with its link count and lifetime total (the two visits above).
+  await page.goto("/admin/campaigns");
+  const row = page.getByRole("table", { name: "Campaigns" }).getByRole("row").filter({ hasText: "E2E Spring" });
+  await expect(row.getByRole("cell")).toHaveText(["E2E Spring", "E2E Spring", "2", "2"]);
+});

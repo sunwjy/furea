@@ -32,3 +32,28 @@ export function isNewer(a: string, b: string): boolean {
   }
   return false;
 }
+
+/** Whether `version` is a readable furea version at all (a registry answer is not trusted to be one). */
+export function isVersion(version: string): boolean {
+  try {
+    parse(version);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isSnapshot(version: string): boolean {
+  return parse(version).snapshot !== undefined;
+}
+
+/**
+ * Whether going from `from` to `to` crosses a release line where breaking changes may land:
+ * the minor in 0.x (ADR 0010), the major from 1.0 on.
+ */
+export function crossesReleaseLine(from: string, to: string): boolean {
+  const [fromMajor, fromMinor] = parse(from).core;
+  const [toMajor, toMinor] = parse(to).core;
+  if (fromMajor !== toMajor) return true;
+  return fromMajor === 0 && fromMinor !== toMinor;
+}

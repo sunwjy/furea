@@ -57,9 +57,10 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
   const manifest = JSON.parse(readFileSync(installer.files.workerManifest, "utf8")) as WorkerManifest;
 
   // 1. Token and account.
-  const { token, accountId } = await deployCredentials(ctx);
+  const { token, accountId, loggedIn } = await deployCredentials(ctx);
   const client = new CloudflareClient({ token, fetch: ctx.fetch });
   await verifyDeployToken(client, token, accountId);
+  step(io, "token", loggedIn ? "create" : "reuse", `verified for account ${accountId}`);
 
   // 2. D1, KV and whatever script is deployed under the name.
   let database = await client.findD1Database(accountId, name);
@@ -89,6 +90,7 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
         "Use npx furea@latest deploy, or pass --allow-downgrade to install the older version anyway.",
     );
   }
+  step(io, "version", "skip", versionGateDetail(deployedVersion, installer.version, downgrade));
 
   // 4. Migrations, before the code that needs them; the old Worker keeps serving meanwhile.
   const applied = await applyMigrations(client, accountId, database.uuid, installer.files.migrations);
@@ -172,12 +174,19 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
   if (hint) io.out(hint);
 }
 
-/** Stored or environment credentials; on a first run at a terminal with none, the login flow. */
+/** Stored or environment credentials; on a first run at a terminal with none, the login flow (`loggedIn`). */
 async function deployCredentials(ctx: CommandContext) {
-  if (!ctx.env.CLOUDFLARE_API_TOKEN && Object.keys(ctx.credentials.read()).length === 0 && ctx.io.interactive) {
-    await login(ctx, { accountToken: false });
-  }
-  return resolveDeployCredentials(ctx);
+  const loggedIn =
+    !ctx.env.CLOUDFLARE_API_TOKEN && Object.keys(ctx.credentials.read()).length === 0 && ctx.io.interactive;
+  if (loggedIn) await login(ctx, { accountToken: false });
+  return { ...(await resolveDeployCredentials(ctx)), loggedIn };
+}
+
+/** The version gate passed: what it compared. */
+function versionGateDetail(deployed: string | undefined, installing: string, downgrade: boolean): string {
+  if (deployed === undefined) return `first install of ${installing}`;
+  if (deployed === installing) return `${installing} already deployed`;
+  return downgrade ? `downgrade from ${deployed} to ${installing} allowed` : `upgrade from ${deployed} to ${installing}`;
 }
 
 function plainText(bindings: Binding[], name: string): string | undefined {

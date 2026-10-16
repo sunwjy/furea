@@ -101,8 +101,10 @@ describe("deploy", () => {
     expect(terminal.stderr).toEqual([]);
     expect(code).toBe(0);
     expect(steps(terminal.stdout)).toEqual([
+      ["token", "reuse"],
       ["database", "create"],
       ["kv", "create"],
+      ["version", "skip"],
       ["migrations", "create"],
       ["assets", "create"],
       ["script", "create"],
@@ -113,6 +115,8 @@ describe("deploy", () => {
     ]);
     expect(terminal.stdout).toContain("migrations  create  applied 0001_init.sql, 0002_campaigns.sql");
     expect(terminal.stdout).toContain("workers.dev  create  https://furea.SUBDOMAIN_1.workers.dev");
+    expect(terminal.stdout).toContain("token  reuse  verified for account ACCOUNT_ID");
+    expect(terminal.stdout).toContain("version  skip  first install of 0.2.0");
 
     const [upload] = await scriptUploads(sent);
     expect(upload!.metadata).toEqual({
@@ -170,6 +174,7 @@ describe("deploy", () => {
     expect(code).toBe(0);
     expect(terminal.stdout).toContain("migrations  create  applied 0002_campaigns.sql");
     expect(terminal.stdout).toContain("script  reuse  furea 0.1.0 → 0.2.0");
+    expect(terminal.stdout).toContain("version  skip  upgrade from 0.1.0 to 0.2.0");
     expect(steps(terminal.stdout).filter(([, action]) => action === "create")).toEqual([["migrations", "create"]]);
     const order = sent.map((s) => `${s.method} ${new URL(s.url).pathname.split("/").slice(-2).join("/")}`);
     expect(order.indexOf("POST ID_1/query")).toBeLessThan(order.indexOf("PUT scripts/furea"));
@@ -185,8 +190,10 @@ describe("deploy", () => {
 
     expect(code).toBe(0);
     expect(steps(terminal.stdout)).toEqual([
+      ["token", "reuse"],
       ["database", "reuse"],
       ["kv", "reuse"],
+      ["version", "skip"],
       ["migrations", "skip"],
       ["assets", "reuse"],
       ["script", "reuse"],
@@ -212,9 +219,11 @@ describe("deploy", () => {
     expect(terminal.stderr).toEqual([]);
     expect(code).toBe(0);
     expect(terminal.stdout).toContain("assets  create  uploaded 2 files (upload session reopened)");
-    expect(steps(terminal.stdout).slice(0, 3)).toEqual([
+    expect(steps(terminal.stdout).slice(0, 5)).toEqual([
+      ["token", "reuse"],
       ["database", "reuse"],
       ["kv", "reuse"],
+      ["version", "skip"],
       ["migrations", "skip"],
     ]);
     expect((await scriptUploads(sent))[0]!.metadata.assets).toMatchObject({ jwt: "JWT_3" });

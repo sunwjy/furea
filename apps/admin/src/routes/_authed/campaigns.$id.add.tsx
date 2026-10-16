@@ -1,17 +1,23 @@
 import {
   CAMPAIGN_LINK_LIMIT,
   campaignUtmKey,
-  composeUtm,
+  composeCampaignLink,
+  CustomSlug,
+  RequiredUtmValue,
+  Title,
+  UtmValue,
   type BulkCreateCampaignLinksRequest,
   type Campaign,
-  type ErrorDetail,
   type Link as LinkResource,
 } from "@furea/shared";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ClipboardPaste, Plus, X } from "lucide-react";
 import { useState } from "react";
+import { type Control, Controller, useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScreeningRefusal } from "@/components/screening-refusal";
@@ -56,7 +62,7 @@ function AddLinksPage() {
 /** The columns of a row, in the order a spreadsheet paste fills them. */
 const COLUMNS = ["source", "medium", "content", "term", "slug", "title"] as const;
 type Column = (typeof COLUMNS)[number];
-type Row = Record<Column, string> & { key: number };
+type Row = Record<Column, string>;
 
 const LABELS: Record<Column, string> = {
   source: "Source",
@@ -75,9 +81,29 @@ const INPUT_NAMES: Partial<Record<Column, string>> = {
   term: "utm_term",
 };
 
-let nextKey = 0;
-const emptyRow = (): Row => ({ key: nextKey++, source: "", medium: "", content: "", term: "", slug: "", title: "" });
+const emptyRow = (): Row => ({ source: "", medium: "", content: "", term: "", slug: "", title: "" });
 const isFilled = (row: Row) => COLUMNS.some((column) => row[column].trim() !== "");
+
+/** The bulk-create item's own field schemas, checked on the rows that are filled; a blank row is not sent. */
+const ROW_CHECKS: [Column, z.ZodType][] = [
+  ["source", RequiredUtmValue],
+  ["medium", RequiredUtmValue],
+  ["content", UtmValue],
+  ["term", UtmValue],
+  ["slug", z.string().trim().pipe(z.literal("").or(CustomSlug))],
+  ["title", Title],
+];
+const RowForm = z
+  .object({ source: z.string(), medium: z.string(), content: z.string(), term: z.string(), slug: z.string(), title: z.string() })
+  .superRefine((row, ctx) => {
+    if (!isFilled(row)) return;
+    for (const [column, schema] of ROW_CHECKS) {
+      const result = schema.safeParse(row[column]);
+      if (!result.success) ctx.addIssue({ code: "custom", path: [column], message: result.error.issues[0]?.message ?? "Invalid." });
+    }
+  });
+const RowsForm = z.object({ rows: z.array(RowForm) });
+type RowsValues = z.infer<typeof RowsForm>;
 
 /** Tab-separated cells as a spreadsheet copies them; a header row starting with "source" is skipped. */
 function parsePaste(text: string): Row[] {
@@ -93,24 +119,19 @@ function parsePaste(text: string): Row[] {
     });
 }
 
-function composeFor(campaign: Campaign, row: Row): string {
-  return composeUtm(campaign.baseUrl, {
-    utm_id: campaign.utmId ?? "",
-    utm_source: row.source,
-    utm_medium: row.medium,
-    utm_campaign: campaign.utmCampaign,
-    utm_term: row.term,
-    utm_content: row.content,
-  });
-}
-
 function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkResource[] }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [rows, setRows] = useState<Row[]>(() => [emptyRow(), emptyRow(), emptyRow()]);
+  const form = useForm<RowsValues>({
+    resolver: zodResolver(RowsForm),
+    defaultValues: { rows: [emptyRow(), emptyRow(), emptyRow()] },
+  });
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: "rows" });
+  const rows = form.watch("rows");
+  const rowErrors = form.formState.errors.rows;
   const [paste, setPaste] = useState<string | null>(null);
-  // The rows as sent and the API's answer for them: per-row errors map back through the sent rows' keys.
-  const [failure, setFailure] = useState<{ sent: number[]; error: unknown } | null>(null);
+  // The rows as sent (by field id) and the API's answer for them: per-row errors map back through the ids.
+  const [failure, setFailure] = useState<{ sent: string[]; error: unknown } | null>(null);
   const [sending, setSending] = useState(false);
 
   const filled = rows.filter(isFilled);
@@ -119,19 +140,18 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
     members.flatMap((link) => (link.utm === null ? [] : [[campaignUtmKey(link.utm), link.slug] as const])),
   );
 
-  function setCell(key: number, column: Column, value: string) {
-    setRows((current) => current.map((row) => (row.key === key ? { ...row, [column]: value } : row)));
-  }
-
   function importPaste() {
-    const pasted = parsePaste(paste ?? "");
-    setRows((current) => [...current.filter(isFilled), ...pasted, emptyRow()]);
+    const current = form.getValues("rows");
+    remove(current.flatMap((row, i) => (isFilled(row) ? [] : [i])));
+    append([...parsePaste(paste ?? ""), emptyRow()]);
     setPaste(null);
   }
 
   async function send(screening?: "skip") {
+    const current = form.getValues("rows");
+    const sent = fields.filter((_, i) => current[i] !== undefined && isFilled(current[i])).map((field) => field.id);
     const body: BulkCreateCampaignLinksRequest = {
-      items: filled.map((row) => ({
+      items: current.filter(isFilled).map((row) => ({
         utm: { source: row.source, medium: row.medium, content: row.content, term: row.term },
         ...(row.slug.trim() === "" ? {} : { slug: row.slug.trim() }),
         ...(row.title.trim() === "" ? {} : { title: row.title }),
@@ -147,26 +167,37 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
       toast.success(`Created ${items.length === 1 ? "1 link" : `${items.length} links`} in ${campaign.name}.`);
       await navigate({ to: "/campaigns/$id", params: { id: campaign.id } });
     } catch (error) {
-      setFailure({ sent: filled.map((row) => row.key), error });
+      setFailure({ sent, error });
       if (!(error instanceof ApiError)) toast.error("Could not create the links. Try again.");
     } finally {
       setSending(false);
     }
   }
 
+  const onSubmit = form.handleSubmit(() => send());
+
   const error = failure?.error;
   const host = flaggedHost(error, "baseUrl");
   const details = error instanceof ApiError && error.code === "validation_failed" ? error.details : [];
-  /** The API's details for one row, by the index it had in the request. */
-  function rowDetails(row: Row): ErrorDetail[] {
-    const index = failure?.sent.indexOf(row.key) ?? -1;
-    if (index === -1) return [];
-    return details.filter((d) => d.field === `items[${index}]` || d.field.startsWith(`items[${index}].`));
+  /** The form's own errors for one row, then the API's, by the index the row had in the request. */
+  function rowProblems(id: string, index: number): Problem[] {
+    const own = COLUMNS.flatMap((column) => {
+      const message = rowErrors?.[index]?.[column]?.message;
+      return message === undefined ? [] : [{ key: `form:${column}`, columns: [column], message }];
+    });
+    const sentIndex = failure?.sent.indexOf(id) ?? -1;
+    if (sentIndex === -1) return own;
+    const prefix = `items[${sentIndex}]`;
+    const fromApi = details
+      .filter((d) => d.field === prefix || d.field.startsWith(`${prefix}.`))
+      .map((d) => ({ key: `api:${d.field}:${d.code}`, columns: columnsOf(d.field.slice(prefix.length + 1)), message: d.message }));
+    return [...own, ...fromApi];
   }
   const failedRows = new Set(details.map((d) => /^items\[(\d+)\]/.exec(d.field)?.[1])).size;
+  const count = filled.length === 1 ? "1 link" : `${filled.length} links`;
 
   return (
-    <div className="flex flex-col gap-4">
+    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h1 className="font-heading text-xl font-semibold">Add links to {campaign.name}</h1>
         <p className="text-sm text-muted-foreground">
@@ -197,24 +228,24 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => {
-              const problems = rowDetails(row);
+            {fields.map((field, i) => {
+              const row = rows[i] ?? emptyRow();
+              const problems = rowProblems(field.id, i);
               const ready = row.source.trim() !== "" && row.medium.trim() !== "";
               const existing = ready ? memberByKey.get(campaignUtmKey(row)) : undefined;
               return (
                 <RowLines
-                  key={row.key}
-                  row={row}
-                  number={i + 1}
+                  key={field.id}
+                  control={form.control}
+                  index={i}
                   problems={problems}
                   warning={
                     existing !== undefined && problems.length === 0
                       ? `Already in the campaign as /${existing} (compared ignoring case).`
                       : null
                   }
-                  destination={ready ? composeFor(campaign, row) : null}
-                  onChange={(column, value) => setCell(row.key, column, value)}
-                  onRemove={() => setRows((current) => current.filter((r) => r.key !== row.key))}
+                  destination={ready ? composeCampaignLink(campaign, row) : null}
+                  onRemove={() => remove(i)}
                 />
               );
             })}
@@ -222,11 +253,11 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
         </table>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => setRows((current) => [...current, emptyRow()])}>
+        <Button type="button" variant="outline" size="sm" onClick={() => append(emptyRow())}>
           <Plus data-icon="inline-start" />
           Row
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setPaste("")}>
+        <Button type="button" variant="outline" size="sm" onClick={() => setPaste("")}>
           <ClipboardPaste data-icon="inline-start" />
           Paste from spreadsheet…
         </Button>
@@ -246,10 +277,10 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
             onChange={(event) => setPaste(event.target.value)}
           />
           <div className="flex gap-2">
-            <Button size="sm" onClick={importPaste}>
+            <Button type="button" size="sm" onClick={importPaste}>
               Add rows
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setPaste(null)}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setPaste(null)}>
               Cancel
             </Button>
           </div>
@@ -267,14 +298,14 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
       {host !== null ? (
         <ScreeningRefusal
           host={host}
-          action={`Create ${filled.length === 1 ? "1 link" : `${filled.length} links`} anyway`}
+          action={`Create ${count} anyway`}
           pending={sending}
           onOverride={() => void send("skip")}
         />
       ) : null}
       <div className="flex items-center gap-3">
-        <Button disabled={filled.length === 0 || sending} onClick={() => void send()}>
-          {sending ? "Creating…" : `Create ${filled.length === 1 ? "1 link" : `${filled.length} links`}`}
+        <Button type="submit" disabled={filled.length === 0 || sending}>
+          {sending ? "Creating…" : `Create ${count}`}
         </Button>
         {filled.length > room ? (
           <span className="text-sm text-destructive">
@@ -282,29 +313,40 @@ function RowEditor({ campaign, members }: { campaign: Campaign; members: LinkRes
           </span>
         ) : null}
       </div>
-    </div>
+    </form>
   );
 }
 
+/** One message under a row, and the cells it marks. */
+interface Problem {
+  key: string;
+  columns: Column[];
+  message: string;
+}
+
+/** The cells an API detail's field (after `items[i].`) points at; `utm` is every UTM cell. */
+function columnsOf(field: string): Column[] {
+  if (field === "utm" || field.startsWith("utm.")) return ["source", "medium", "content", "term"];
+  return (COLUMNS as readonly string[]).includes(field) ? [field as Column] : [];
+}
+
 function RowLines({
-  row,
-  number,
+  control,
+  index,
   problems,
   warning,
   destination,
-  onChange,
   onRemove,
 }: {
-  row: Row;
-  number: number;
-  problems: ErrorDetail[];
+  control: Control<RowsValues>;
+  index: number;
+  problems: Problem[];
   warning: string | null;
   destination: string | null;
-  onChange: (column: Column, value: string) => void;
   onRemove: () => void;
 }) {
-  const invalid = (column: Column) =>
-    problems.some((d) => d.field.endsWith(`.${column}`) || (d.field.endsWith(".utm") && column !== "slug" && column !== "title"));
+  const number = index + 1;
+  const invalid = (column: Column) => problems.some((p) => p.columns.includes(column));
 
   return (
     <>
@@ -312,21 +354,30 @@ function RowLines({
         <td className="px-2 py-1 text-muted-foreground">{number}</td>
         {COLUMNS.map((column) => (
           <td key={column} className="px-1 py-1">
-            <Input
-              aria-label={`Row ${number} ${LABELS[column]}`}
-              name={INPUT_NAMES[column]}
-              autoComplete={column in INPUT_NAMES ? "on" : "off"}
-              spellCheck={false}
-              placeholder={column === "slug" ? "generated" : undefined}
-              aria-invalid={invalid(column) ? true : undefined}
-              className="min-w-24"
-              value={row[column]}
-              onChange={(event) => onChange(column, event.target.value)}
+            <Controller
+              control={control}
+              name={`rows.${index}.${column}`}
+              render={({ field }) => (
+                <Input
+                  aria-label={`Row ${number} ${LABELS[column]}`}
+                  // Not the form path: the parameter name, for the browser's autocomplete.
+                  name={INPUT_NAMES[column]}
+                  autoComplete={column in INPUT_NAMES ? "on" : "off"}
+                  spellCheck={false}
+                  placeholder={column === "slug" ? "generated" : undefined}
+                  aria-invalid={invalid(column) ? true : undefined}
+                  className="min-w-24"
+                  ref={field.ref}
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                />
+              )}
             />
           </td>
         ))}
         <td className="px-1 py-1">
-          <Button variant="ghost" size="icon-sm" aria-label={`Remove row ${number}`} onClick={onRemove}>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove row ${number}`} onClick={onRemove}>
             <X />
           </Button>
         </td>
@@ -337,8 +388,8 @@ function RowLines({
           <td colSpan={COLUMNS.length + 1} className="px-2 pb-2 text-xs">
             {problems.length > 0 ? (
               <ul className="flex flex-col gap-0.5 text-destructive">
-                {problems.map((d) => (
-                  <li key={`${d.field}:${d.code}`}>{d.message}</li>
+                {problems.map((p) => (
+                  <li key={p.key}>{p.message}</li>
                 ))}
               </ul>
             ) : warning !== null ? (

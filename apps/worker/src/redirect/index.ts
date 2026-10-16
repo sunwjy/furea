@@ -2,7 +2,7 @@
 
 import { isCustomSlug, isReservedPath } from "@furea/shared";
 import { Hono } from "hono";
-import { cacheEntryOf, readCacheEntry, writeCacheEntry } from "../core/cache.ts";
+import { cacheEntryOf, readCacheEntry, ROOT_CACHE_KEY, writeCacheEntry } from "../core/cache.ts";
 import { getLink } from "../core/db/links.ts";
 import type { Env } from "../core/env.ts";
 import { methodNotAllowed, redirectTo, robotsTxt, unknownSlug } from "./responses.ts";
@@ -11,6 +11,13 @@ export const redirect = new Hono<{ Bindings: Env }>();
 
 // Hono answers HEAD by running the GET route and dropping the body, so HEAD mirrors GET by construction.
 redirect.get("/robots.txt", () => robotsTxt());
+
+// The root is never a slug (ADR 0008). Only the cache is read: the same write-through and repair as links keep the
+// reserved entry in step with D1. A root redirect is not a click.
+redirect.get("/", async (c) => {
+  const entry = await readCacheEntry(c.env.KV, ROOT_CACHE_KEY);
+  return entry === null || entry.disabled ? unknownSlug() : redirectTo(entry.to);
+});
 
 redirect.get("*", async (c) => {
   // The raw pathname: c.req.path is percent-decoded, and slugs are matched byte for byte (ADR 0002).

@@ -170,3 +170,30 @@ describe("robots.txt", () => {
     expect(await res.text()).toBe("");
   });
 });
+
+describe("the root path with a root destination", () => {
+  afterEach(async () => {
+    await env.KV.delete("_");
+  });
+
+  it("answers 302 to the root destination with no-store, read from the reserved cache key", async () => {
+    await env.KV.put("_", JSON.stringify({ to: "https://example.com/home", disabled: false }));
+    const res = await request("/");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("https://example.com/home");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("answers HEAD like GET, without a body", async () => {
+    await env.KV.put("_", JSON.stringify({ to: "https://example.com/home", disabled: false }));
+    const head = await request("/", "HEAD");
+    expect(head.status).toBe(302);
+    expect(head.headers.get("location")).toBe("https://example.com/home");
+    expect(await head.text()).toBe("");
+  });
+
+  it("never makes /_ a way to reach it", async () => {
+    await env.KV.put("_", JSON.stringify({ to: "https://example.com/home", disabled: false }));
+    expect(await snapshot(await request("/_"))).toEqual(await snapshot(await request("/nope")));
+  });
+});

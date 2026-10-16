@@ -429,6 +429,106 @@
         }
       }
     },
+    "/settings": {
+      "get": {
+        "summary": "The instance settings: the root destination, Access mode and read-only instance facts.",
+        "responses": {
+          "200": {
+            "description": "The settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are read-only. An empty {} still rewrites the root destination's redirect cache entry.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The settings after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/password": {
+      "post": {
+        "summary": "Change the operator password after re-entering the current one; ends every session. Session only.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Changed; every session is ended and this one's cookie cleared."
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "summary": "This document.",
@@ -455,6 +555,27 @@
       }
     },
     "schemas": {
+      "ChangePasswordRequest": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 256,
+            "description": "12 to 256 characters, no complexity rules."
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "additionalProperties": false
+      },
       "CreateApiKeyRequest": {
         "type": "object",
         "properties": {
@@ -535,6 +656,30 @@
           },
           "slug": {
             "description": "Never accepted: a link's slug cannot be changed (slug_immutable)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "rootDestination": {
+            "description": "Where the bare hostname redirects (302, not a click); null unsets it and / answers 404.",
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "An absolute http or https URL, at most 2048 characters of printable ASCII (percent-encoded), not pointing at this instance."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "analyticsConfigured": {
+            "description": "Never accepted: analyticsConfigured is read-only (read_only_field)."
+          },
+          "version": {
+            "description": "Never accepted: version is read-only (read_only_field)."
           }
         },
         "additionalProperties": false
@@ -872,6 +1017,51 @@
           "kind",
           "scope",
           "apiKey"
+        ]
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "rootDestination": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "access": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "teamDomain": {
+                    "type": "string"
+                  },
+                  "aud": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "teamDomain",
+                  "aud"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "analyticsConfigured": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rootDestination",
+          "access",
+          "analyticsConfigured",
+          "version"
         ]
       }
     },

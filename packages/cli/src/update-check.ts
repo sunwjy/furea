@@ -2,9 +2,10 @@
 // L is looked up once, by `status` and at the end of `deploy`, without credentials and with a 2-second limit;
 // any failure is silent and leaves I as the newest known release. Nothing here ever changes an exit code.
 
-import { RELEASES_URL } from "./links.ts";
 import { crossesReleaseLine, isNewer, isSnapshot, isVersion } from "./version.ts";
 
+/** Release notes live only on GitHub Releases; no changelog text ships in the package. */
+const RELEASES_URL = "https://github.com/sunwjy/furea/releases";
 const NPMJS = "https://registry.npmjs.org";
 const TIMEOUT_MS = 2000;
 const UPGRADE = "npx furea@latest deploy";

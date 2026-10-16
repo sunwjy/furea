@@ -54,7 +54,7 @@ export async function status(ctx: CommandContext, options: StatusOptions): Promi
   for (const cron of manifest.crons) if (!crons.includes(cron)) drift.push(`Cron Trigger ${cron} is missing`);
 
   // Hostname: a custom domain, else workers.dev.
-  const domains = await client.listWorkerDomains(accountId, name);
+  const domains = await client.listWorkerDomains(accountId, { service: name });
   let hostname: string | undefined;
   if (domains.length > 0) hostname = domains.map((d) => `https://${d.hostname}`).join(", ");
   else {

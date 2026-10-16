@@ -10,6 +10,13 @@ export interface Io {
   openUrl(url: string): Promise<void>;
 }
 
+/** What a step of `deploy` (or a later command redoing one) did: one `<step>  <action>  <detail>` line (ADR 0006). */
+export type Action = "create" | "reuse" | "skip";
+
+export function step(io: Io, name: string, action: Action, detail: string): void {
+  io.out(`${name}  ${action}  ${detail}`);
+}
+
 /** A user-facing failure: printed without a stack trace, exit code 1. */
 export class CliError extends Error {
   override name = "CliError";

@@ -2,7 +2,7 @@
 // destination; ADR 0003 password policy).
 
 import { z } from "zod";
-import { Destination } from "./links.ts";
+import { Destination, ScreeningOverride } from "./links.ts";
 
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 256;
@@ -21,6 +21,7 @@ export const UpdateSettingsRequest = z.strictObject({
     .describe("Where the bare hostname redirects (302, not a click); null unsets it and / answers 404."),
   analyticsConfigured: ReadOnly("analyticsConfigured").optional(),
   version: ReadOnly("version").optional(),
+  screening: ScreeningOverride,
 });
 export type UpdateSettingsRequest = Omit<z.input<typeof UpdateSettingsRequest>, "analyticsConfigured" | "version">;
 export type UpdateSettingsBody = Omit<z.output<typeof UpdateSettingsRequest>, "analyticsConfigured" | "version">;

@@ -11,8 +11,9 @@ import { EnableToggle, LinkBadges, SyncPendingNotice, useUpdateLink } from "@/co
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ScreeningRefusal } from "@/components/screening-refusal";
 import { UtmBuilder } from "@/components/utm-builder";
-import { ApiError, fieldDetails } from "@/lib/api";
+import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
 import { linkQuery } from "@/lib/links";
 
 // Nothing static lives under `/links/`: any word there is also a valid custom slug, so the new-link page is `/new`.
@@ -99,6 +100,9 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
     defaultValues: { destination: link.destination, title: link.title ?? "" },
   });
   const { errors, isSubmitting } = form.formState;
+  const destination = form.watch("destination");
+  // The refused request, kept for "Save anyway"; it lapses once the destination is edited.
+  const [refused, setRefused] = useState<{ host: string; body: UpdateLinkRequest } | null>(null);
 
   // The builder's output replaces the destination; it is validated as typed once the form was submitted.
   function composeDestination(destination: string) {
@@ -110,11 +114,21 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
     const body: UpdateLinkRequest = {};
     if (destination !== link.destination) body.destination = destination;
     if (title !== link.title) body.title = title;
+    await send(body);
+  });
+
+  async function send(body: UpdateLinkRequest) {
+    setRefused(null);
     try {
       await update.mutateAsync(body);
       toast.success(`Saved /${link.slug}.`);
       onDone();
     } catch (error) {
+      const host = flaggedHost(error, "destination");
+      if (host !== null) {
+        setRefused({ host, body });
+        return;
+      }
       const fieldErrors = fieldDetails(error, FIELDS);
       if (fieldErrors.length === 0) {
         toast.error(error instanceof ApiError ? error.message : "Could not save the link. Try again.");
@@ -122,7 +136,7 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
       }
       for (const detail of fieldErrors) form.setError(detail.field, { message: detail.message });
     }
-  });
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -139,7 +153,15 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
           />
           <FieldError errors={[errors.destination]} />
         </Field>
-        <UtmBuilder destination={form.watch("destination")} onCompose={composeDestination} />
+        {refused !== null && refused.body.destination === destination && (
+          <ScreeningRefusal
+            host={refused.host}
+            action="Save anyway"
+            pending={update.isPending || isSubmitting}
+            onOverride={() => void send({ ...refused.body, screening: "skip" })}
+          />
+        )}
+        <UtmBuilder destination={destination} onCompose={composeDestination} />
         <Field data-invalid={errors.title ? true : undefined}>
           <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
           <Input id="title" aria-invalid={errors.title ? true : undefined} {...form.register("title")} />

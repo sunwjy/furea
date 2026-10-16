@@ -223,7 +223,7 @@
     },
     "/links": {
       "post": {
-        "summary": "Create a link, with a custom slug or a generated one.",
+        "summary": "Create a link, with a custom slug or a generated one. The destination's host is screened (422 destination_flagged); a session may send screening: \"skip\" to save it anyway.",
         "requestBody": {
           "required": true,
           "content": {
@@ -261,6 +261,9 @@
             "$ref": "#/components/responses/Error"
           },
           "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -349,7 +352,7 @@
         }
       },
       "patch": {
-        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry.",
+        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry. A destination is screened like on creation.",
         "parameters": [
           {
             "name": "slug",
@@ -397,6 +400,9 @@
             "$ref": "#/components/responses/Error"
           },
           "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -449,7 +455,7 @@
         }
       },
       "patch": {
-        "summary": "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are read-only. An empty {} still rewrites the root destination's redirect cache entry.",
+        "summary": "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is screened like a link's destination.",
         "requestBody": {
           "required": true,
           "content": {
@@ -484,6 +490,9 @@
             "$ref": "#/components/responses/Error"
           },
           "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -615,6 +624,11 @@
               "string",
               "null"
             ]
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
           }
         },
         "required": [
@@ -656,6 +670,11 @@
           },
           "slug": {
             "description": "Never accepted: a link's slug cannot be changed (slug_immutable)."
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
           }
         },
         "additionalProperties": false
@@ -680,6 +699,11 @@
           },
           "version": {
             "description": "Never accepted: version is read-only (read_only_field)."
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
           }
         },
         "additionalProperties": false

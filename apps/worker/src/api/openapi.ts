@@ -147,10 +147,12 @@ const OPERATIONS: Operation[] = [
   {
     method: "post",
     path: "/links",
-    summary: "Create a link, with a custom slug or a generated one.",
+    summary:
+      "Create a link, with a custom slug or a generated one. The destination's host is screened (422 " +
+      "destination_flagged); a session may send screening: \"skip\" to save it anyway.",
     body: "CreateLinkRequest",
     success: { status: 201, description: "The created link.", schema: "Link" },
-    errors: [...BODY_ERRORS, 401, 403, 409],
+    errors: [...BODY_ERRORS, 401, 403, 409, 422],
   },
   {
     method: "get",
@@ -173,11 +175,11 @@ const OPERATIONS: Operation[] = [
     path: "/links/{slug}",
     summary:
       "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the " +
-      "redirect cache entry.",
+      "redirect cache entry. A destination is screened like on creation.",
     parameters: [SLUG_PARAMETER],
     body: "UpdateLinkRequest",
     success: { status: 200, description: "The edited link.", schema: "Link" },
-    errors: [...BODY_ERRORS, 401, 403, 404],
+    errors: [...BODY_ERRORS, 401, 403, 404, 422],
   },
   {
     method: "delete",
@@ -199,10 +201,11 @@ const OPERATIONS: Operation[] = [
     path: "/settings",
     summary:
       "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are " +
-      "read-only. An empty {} still rewrites the root destination's redirect cache entry.",
+      "read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is " +
+      "screened like a link's destination.",
     body: "UpdateSettingsRequest",
     success: { status: 200, description: "The settings after the edit.", schema: "Settings" },
-    errors: [...BODY_ERRORS, 401, 403],
+    errors: [...BODY_ERRORS, 401, 403, 422],
   },
   {
     method: "post",

@@ -34,7 +34,7 @@ import { composeInto, UtmBuilder } from "@/components/utm-builder";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { campaignListQuery } from "@/lib/campaigns";
 import { linkQuery } from "@/lib/links";
-import { analyticsMissing, browserTimeZone, linkStatsQuery } from "@/lib/stats";
+import { analyticsMissing, browserTimeZone, linkBreakdownsQuery } from "@/lib/stats";
 
 // Nothing static lives under `/links/`: any word there is also a valid custom slug, so the new-link page is `/new`.
 export const Route = createFileRoute("/_authed/links/$slug")({
@@ -229,7 +229,7 @@ function Membership({ link }: { link: LinkResource }) {
 /** The link's breakdowns for a range (ADR 0005), or the degraded hint; the lifetime total above stays either way. */
 function LinkAnalytics({ slug }: { slug: string }) {
   const [range, setRange] = useState<StatsRange>("7d");
-  const stats = useQuery(linkStatsQuery(slug, range));
+  const stats = useQuery(linkBreakdownsQuery(slug, range));
   const missing = stats.isError ? analyticsMissing(stats.error) : null;
 
   if (missing) return <AnalyticsHint missing={missing} dismissible={false} />;

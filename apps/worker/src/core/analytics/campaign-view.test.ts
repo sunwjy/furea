@@ -3,7 +3,7 @@
 
 import { CAMPAIGN_LINK_LIMIT } from "@furea/shared";
 import { describe, expect, it } from "vitest";
-import { campaignQueries } from "./campaign-stats.ts";
+import { campaignQueries } from "./campaign-view.ts";
 
 const NOW = new Date("2026-10-16T05:30:00Z");
 

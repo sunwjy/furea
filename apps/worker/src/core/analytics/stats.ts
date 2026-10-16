@@ -46,7 +46,7 @@ export function zeroFilled(buckets: Bucket[], rows: SqlRow[], sinceMs = -Infinit
   return buckets.map((b) => ({ start: b.start, clicks: b.endMs > sinceMs ? (clicks.get(b.key) ?? 0) : 0 }));
 }
 
-export async function linkStats(
+export async function linkBreakdowns(
   client: SqlClient,
   link: { slug: string; created_at: string },
   { range, tz, now }: StatsRequest,
@@ -87,7 +87,7 @@ export const BOUNDS_PER_QUERY = 50;
  * bound per link, so the links created inside the range (where a reused slug could inherit a deleted link's clicks,
  * ADR 0002) are read again with `index1 = <slug> AND timestamp >= <created_at>`, at most 50 bounds per query.
  */
-export async function instanceStats(
+export async function instanceOverview(
   client: SqlClient,
   db: D1Database,
   { range, tz, now }: StatsRequest,

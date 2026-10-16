@@ -39,7 +39,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { CAMPAIGNS_KEY, campaignLinksQuery, campaignQuery, deleteCampaign } from "@/lib/campaigns";
 import { LINKS_KEY } from "@/lib/links";
-import { analyticsMissing, browserTimeZone, campaignStatsQuery } from "@/lib/stats";
+import { analyticsMissing, browserTimeZone, campaignViewQuery } from "@/lib/stats";
 
 export const Route = createFileRoute("/_authed/campaigns/$id/")({
   component: CampaignPage,
@@ -161,7 +161,7 @@ const NONE = <span className="text-muted-foreground">—</span>;
  */
 function CampaignBody({ campaign }: { campaign: Campaign }) {
   const [range, setRange] = useState<StatsRange>("7d");
-  const stats = useQuery(campaignStatsQuery(campaign.id, range));
+  const stats = useQuery(campaignViewQuery(campaign.id, range));
   const missing = stats.isError ? analyticsMissing(stats.error) : null;
   const rangeClicks = stats.data?.series.reduce((sum, p) => sum + p.clicks, 0);
 

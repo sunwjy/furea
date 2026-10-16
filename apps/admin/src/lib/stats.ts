@@ -25,7 +25,7 @@ const query = (range: StatsRange) => new URLSearchParams({ range, tz: browserTim
 /** Not retried on 503: the instance is not configured for breakdowns, which a retry does not change. */
 const retry = (count: number, error: unknown) => analyticsMissing(error) === null && count < 2;
 
-export function instanceStatsQuery(range: StatsRange) {
+export function instanceOverviewQuery(range: StatsRange) {
   return queryOptions({
     queryKey: ["stats", "instance", range],
     queryFn: () => apiJson(`/stats?${query(range)}`, InstanceStats),
@@ -33,7 +33,7 @@ export function instanceStatsQuery(range: StatsRange) {
   });
 }
 
-export function linkStatsQuery(slug: string, range: StatsRange) {
+export function linkBreakdownsQuery(slug: string, range: StatsRange) {
   return queryOptions({
     queryKey: ["stats", "link", slug, range],
     queryFn: () => apiJson(`/links/${encodeURIComponent(slug)}/stats?${query(range)}`, LinkStats),
@@ -42,7 +42,7 @@ export function linkStatsQuery(slug: string, range: StatsRange) {
 }
 
 /** Under the campaigns' key, so a membership change (any campaign write) refetches the breakdowns. */
-export function campaignStatsQuery(id: string, range: StatsRange) {
+export function campaignViewQuery(id: string, range: StatsRange) {
   return queryOptions({
     queryKey: [...CAMPAIGNS_KEY, "stats", id, range],
     queryFn: () => apiJson(`/campaigns/${encodeURIComponent(id)}/stats?${query(range)}`, CampaignStats),

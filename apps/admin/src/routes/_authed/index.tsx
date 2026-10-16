@@ -21,7 +21,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { deleteLink, LINKS_KEY, linkFeedQuery } from "@/lib/links";
-import { analyticsMissing, instanceStatsQuery } from "@/lib/stats";
+import { analyticsMissing, instanceOverviewQuery } from "@/lib/stats";
 
 const FeedSearch = z.object({
   q: z.string().optional().catch(undefined),
@@ -40,7 +40,7 @@ function LinksPage() {
   const feed = useInfiniteQuery(linkFeedQuery(q));
   const links = feed.data?.pages.flatMap((page) => page.items) ?? [];
   // The feed's sparklines are always the last 7 days (ADR 0005).
-  const overview = useQuery(instanceStatsQuery("7d"));
+  const overview = useQuery(instanceOverviewQuery("7d"));
   const missing = overview.isError ? analyticsMissing(overview.error) : null;
 
   return (

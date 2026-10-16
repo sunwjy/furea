@@ -52,7 +52,7 @@ export function campaignQueries(
  * The campaign view's breakdowns over its current members: the combined series and top lists, and `bySlug` with
  * every member, zero-filled. A campaign with no members runs no query.
  */
-export async function campaignStats(
+export async function campaignView(
   client: SqlClient,
   members: readonly CampaignMember[],
   { range, tz, now }: StatsRequest,

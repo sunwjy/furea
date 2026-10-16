@@ -49,7 +49,7 @@ Example: base URL `https://ex.com/p?ref=a#top`, source `news letter`, medium `em
 
 ## Adopt (amends ADR 0012)
 
-- A plain link matches a campaign when its non-UTM part (everything compose would keep, byte for byte, including pair order and fragment) equals the campaign's base URL, and its decoded UTM values equal the campaign's shared values plus some source/medium (and optional content/term) unique in the campaign. A destination with a duplicate UTM key or a case-variant `UTM_*` key never matches.
+- A plain link matches a campaign when its non-UTM part (everything compose would keep, byte for byte, including pair order and fragment) equals the campaign's base URL, and its decoded UTM values equal the campaign's shared values plus some source/medium (and optional content/term) unique in the campaign. A destination with a duplicate UTM key or a case-variant `UTM_*` key never matches, nor does one whose source, medium, content or term starts or ends with whitespace (`utm_value_untrimmed`): campaign link values are trimmed (ADR 0012), so adopting it would change a value the visitor lands with.
 - On adopt the destination is rewritten to the canonical form (one D1 write and the usual KV write-through, ADR 0004). The visitor lands on the same page with the same parameter values; only order and encoding of the UTM pairs may change. ADR 0012's "adopting never rewrites a destination" becomes "adopting never changes where a visitor lands". Screening (ADR 0013) still does not run: the host is unchanged.
 
 ## Considered options

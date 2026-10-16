@@ -15,6 +15,7 @@ export const ADOPT_MISMATCH_REASONS = [
   "utm_campaign_mismatch",
   "utm_id_mismatch",
   "utm_missing",
+  "utm_value_untrimmed",
   "duplicate_utm_key",
   "utm_combination_taken",
 ] as const;
@@ -26,6 +27,8 @@ export const ADOPT_MISMATCH_MESSAGES: Record<AdoptMismatchReason, string> = {
   utm_campaign_mismatch: "The destination's utm_campaign is not the campaign's UTM campaign.",
   utm_id_mismatch: "The destination's utm_id is not the campaign's utm_id.",
   utm_missing: "The destination needs a utm_source and a utm_medium.",
+  utm_value_untrimmed:
+    "A UTM value of the destination starts or ends with whitespace, which a campaign link's values never do.",
   duplicate_utm_key: "The destination repeats a UTM parameter or carries one in another case (like UTM_Source).",
   utm_combination_taken: "Another link of the campaign has the same source, medium, content and term (ignoring case).",
 };
@@ -58,11 +61,14 @@ export function matchAdopt(
   if (composeUtm(destination, {}) !== composeUtm(campaign.baseUrl, {})) return refuse("base_url_mismatch");
   if (values.utm_campaign !== campaign.utmCampaign) return refuse("utm_campaign_mismatch");
   if (values.utm_id !== (campaign.utmId ?? "")) return refuse("utm_id_mismatch");
-  const source = values.utm_source.trim();
-  const medium = values.utm_medium.trim();
-  if (source === "" || medium === "") return refuse("utm_missing");
-  const content = values.utm_content.trim() === "" ? null : values.utm_content.trim();
-  const term = values.utm_term.trim() === "" ? null : values.utm_term.trim();
+  if (values.utm_source.trim() === "" || values.utm_medium.trim() === "") return refuse("utm_missing");
+  // Campaign link values are trimmed (ADR 0012); trimming here would change where a visitor lands (ADR 0014).
+  const own = [values.utm_source, values.utm_medium, values.utm_content, values.utm_term];
+  if (own.some((value) => value !== value.trim())) return refuse("utm_value_untrimmed");
+  const source = values.utm_source;
+  const medium = values.utm_medium;
+  const content = values.utm_content === "" ? null : values.utm_content;
+  const term = values.utm_term === "" ? null : values.utm_term;
   const utm = { source, medium, content, term };
   const utmKey = campaignUtmKey(utm);
   if (takenUtmKeys.has(utmKey)) return refuse("utm_combination_taken");

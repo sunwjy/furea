@@ -79,6 +79,18 @@ describe("matchAdopt", () => {
       "utm_missing",
     ],
     [
+      "utm_value_untrimmed: a source with a leading space",
+      "https://shop.example/p?ref=a&utm_source=%20x&utm_medium=y&utm_campaign=Spring%2026#top",
+      SPRING,
+      "utm_value_untrimmed",
+    ],
+    [
+      "utm_value_untrimmed: a whitespace-only content",
+      "https://shop.example/p?ref=a&utm_source=x&utm_medium=y&utm_campaign=Spring%2026&utm_content=+#top",
+      SPRING,
+      "utm_value_untrimmed",
+    ],
+    [
       "duplicate_utm_key: a key twice",
       "https://shop.example/p?ref=a&utm_source=x&utm_source=x&utm_medium=y&utm_campaign=Spring%2026#top",
       SPRING,

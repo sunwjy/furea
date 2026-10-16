@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { insertLink } from "../core/db/links.ts";
+import { getLink, insertLink } from "../core/db/links.ts";
 
 const ORIGIN = "https://s.example.com";
 
@@ -62,6 +62,37 @@ describe("a link in D1", () => {
     expect(head.headers.get("location")).toBe("https://example.com/landing?x=1");
     expect(head.headers.get("cache-control")).toBe("no-store");
     expect(await head.text()).toBe("");
+  });
+});
+
+async function clickCount(slug: string): Promise<number | undefined> {
+  return (await getLink(env.DB, slug))?.click_count;
+}
+
+describe("clicks", () => {
+  it("counts each GET and HEAD redirect once in click_count", async () => {
+    await insertLink(env.DB, { slug: "counted", destination: "https://example.com/counted" });
+    expect((await request("/counted")).status).toBe(302);
+    expect((await request("/counted", "HEAD")).status).toBe(302);
+    expect((await request("/counted")).status).toBe(302);
+    await vi.waitFor(async () => expect(await clickCount("counted")).toBe(3));
+  });
+
+  it("counts a redirect answered from KV alone", async () => {
+    await insertLink(env.DB, { slug: "kv-click", destination: "https://example.com/kv-click" });
+    await env.KV.put("kv-click", JSON.stringify({ to: "https://example.com/kv-click", disabled: false }));
+    expect((await request("/kv-click")).status).toBe(302);
+    await vi.waitFor(async () => expect(await clickCount("kv-click")).toBe(1));
+  });
+
+  it("does not count a disabled link, the root or an unknown slug", async () => {
+    await insertLink(env.DB, { slug: "not-counted", destination: "https://example.com/x", enabled: false });
+    expect((await request("/not-counted")).status).toBe(404);
+    expect((await request("/")).status).toBe(404);
+    expect((await request("/no-such-link")).status).toBe(404);
+    // Give a stray waitUntil the same chance a counted click gets.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await clickCount("not-counted")).toBe(0);
   });
 });
 

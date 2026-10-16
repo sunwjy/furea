@@ -13,7 +13,7 @@ furea runs as a single Cloudflare Worker with one D1 database, one KV namespace 
 
 ## Install
 
-You need a Cloudflare account (the Free plan is enough) and Node.js 20 or newer.
+You need a Cloudflare account (the Free plan is enough) and Node.js 22 or newer.
 
 ```sh
 npx furea

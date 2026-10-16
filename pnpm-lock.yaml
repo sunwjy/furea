@@ -139,9 +139,15 @@ importers:
       '@furea/admin':
         specifier: workspace:*
         version: link:../../apps/admin
+      '@furea/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@furea/worker':
         specifier: workspace:*
         version: link:../../apps/worker
+      '@noble/hashes':
+        specifier: ^2.4.0
+        version: 2.4.0
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -998,6 +1004,10 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -3875,6 +3885,8 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
+
+  '@noble/hashes@2.4.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

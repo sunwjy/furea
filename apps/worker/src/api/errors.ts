@@ -16,3 +16,6 @@ export function apiError(
 
 export const unauthorized = () => apiError(401, "unauthorized", "Authentication required.");
 export const notFound = () => apiError(404, "not_found", "Not found.");
+/** `400 validation_failed` with every failure as a detail (ADR 0009), for the checks a schema cannot make. */
+export const validationFailed = (details: ErrorDetail[]) =>
+  apiError(400, "validation_failed", "The request is invalid.", { details });

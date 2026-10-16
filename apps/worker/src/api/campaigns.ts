@@ -15,6 +15,7 @@ import {
   UpdateCampaignLinksRequest,
   UpdateCampaignRequest,
   type Campaign,
+  type BulkCreateCampaignLinksBody,
   type CampaignLinkUtm,
   type CampaignLinks,
   type CampaignPage,
@@ -44,7 +45,7 @@ import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
 import { baseUrlFor, destinationFor } from "./destination.ts";
-import { apiError, notFound } from "./errors.ts";
+import { apiError, notFound, validationFailed } from "./errors.ts";
 import { toLinks, utmOf } from "./link-resource.ts";
 import { logScreening, screen } from "./screening.ts";
 import { requireCaller, requireWrite } from "./session.ts";
@@ -132,7 +133,7 @@ campaigns.patch("/:id", requireWrite, jsonBody(updateCampaignRequestFor), async 
       }
       rewritten.push({ slug: row.slug, destination: composed });
     }
-    if (details.length > 0) return apiError(400, "validation_failed", "The request is invalid.", { details });
+    if (details.length > 0) return validationFailed(details);
   }
 
   // A rewriting edit is screened once, on the base URL every member shares (ADR 0012, ADR 0013).
@@ -189,16 +190,76 @@ campaigns.post("/:id/links", requireWrite, jsonBody(BulkCreateCampaignLinksReque
     );
   }
 
-  // Every item is validated before anything is written, and every failure is reported (ADR 0009).
-  const members = new Map((await listCampaignLinks(c.env.DB, campaign.id)).map((row) => [row.slug, row]));
-  const takenKeys = await campaignUtmKeys(c.env.DB, campaign.id);
-  const givenSlugs = items.flatMap((item) => (item.slug === undefined ? [] : [item.slug]));
-  const takenSlugs = await createdAtOf(c.env.DB, givenSlugs);
   const destination = destinationFor(new URL(c.req.url));
+  const first = await planBulkCreate(c.env.DB, campaign, items, destination);
+  if (first.details.length > 0) return validationFailed(first.details);
+
+  // One lookup for the base URL's host: every item shares it (ADR 0013).
+  const screened = await screen(c.var.caller, [{ field: "baseUrl", url: campaign.base_url }], screening);
+  if (screened instanceof Response) return screened;
+
+  // Another write can take a slug or a combination between validation and the insert; the batch then rolls back
+  // whole (the UNIQUE indexes), and validating again reports it like any other failure.
+  let planned = first.planned;
+  let slugs: string[] = [];
+  for (let attempt = 1; ; attempt++) {
+    slugs = await assignSlugs(c.env.DB, planned.map((item) => item.slug));
+    // One millisecond apart, so the member list (createdAt asc) keeps the request's order.
+    const start = Date.now();
+    try {
+      await insertCampaignLinks(
+        c.env.DB,
+        campaign.id,
+        planned.map((item, i) => ({ ...item, slug: slugs[i] as string, now: new Date(start + i) })),
+      );
+      break;
+    } catch (error) {
+      if (!isUniqueViolation(error) || attempt === BULK_INSERT_ATTEMPTS) throw error;
+      const again = await planBulkCreate(c.env.DB, campaign, items, destination);
+      if (again.details.length > 0) return validationFailed(again.details);
+      // Only a generated slug collided: draw new ones.
+      planned = again.planned;
+    }
+  }
+
+  const created = new Map((await listCampaignLinks(c.env.DB, campaign.id)).map((row) => [row.slug, row]));
+  const synced: LinkRow[] = [];
+  for (const slug of slugs) {
+    const row = created.get(slug);
+    if (row === undefined) throw new Error("a created link vanished");
+    synced.push(await writeThrough(c.env.DB, c.env.KV, row));
+    logScreening(screened, slug);
+  }
+  return c.json({ items: await toLinks(c.env.DB, synced, c.req.url) } satisfies CampaignLinks, 201);
+});
+
+/** Inserting a bulk creation again after a UNIQUE violation: once for a raced write, once more for good measure. */
+const BULK_INSERT_ATTEMPTS = 3;
+
+const isUniqueViolation = (error: unknown) => error instanceof Error && /UNIQUE constraint failed/.test(error.message);
+
+interface PlannedItem {
+  slug: string | undefined;
+  destination: string;
+  title: string | null;
+  utmKey: string;
+}
+
+/** Every item checked against the stored links before anything is written, every failure reported (ADR 0009). */
+async function planBulkCreate(
+  db: D1Database,
+  campaign: CampaignRow,
+  items: BulkCreateCampaignLinksBody["items"],
+  destination: ReturnType<typeof destinationFor>,
+): Promise<{ planned: PlannedItem[]; details: ErrorDetail[] }> {
+  const members = new Map((await listCampaignLinks(db, campaign.id)).map((row) => [row.slug, row]));
+  const takenKeys = await campaignUtmKeys(db, campaign.id);
+  const givenSlugs = items.flatMap((item) => (item.slug === undefined ? [] : [item.slug]));
+  const takenSlugs = await createdAtOf(db, givenSlugs);
   const seenSlugs = new Map<string, number>();
   const seenKeys = new Map<string, number>();
   const details: ErrorDetail[] = [];
-  const planned = items.map((item, i) => {
+  const planned = items.map((item, i): PlannedItem => {
     if (item.slug !== undefined) {
       const earlier = seenSlugs.get(item.slug);
       if (takenSlugs.has(item.slug)) {
@@ -246,31 +307,8 @@ campaigns.post("/:id/links", requireWrite, jsonBody(BulkCreateCampaignLinksReque
     }
     return { slug: item.slug, destination: composed, title: item.title ?? null, utmKey };
   });
-  if (details.length > 0) return apiError(400, "validation_failed", "The request is invalid.", { details });
-
-  // One lookup for the base URL's host: every item shares it (ADR 0013).
-  const screened = await screen(c.var.caller, [{ field: "baseUrl", url: campaign.base_url }], screening);
-  if (screened instanceof Response) return screened;
-
-  const slugs = await assignSlugs(c.env.DB, planned.map((item) => item.slug));
-  // One millisecond apart, so the member list (createdAt asc) keeps the request's order.
-  const start = Date.now();
-  await insertCampaignLinks(
-    c.env.DB,
-    campaign.id,
-    planned.map((item, i) => ({ ...item, slug: slugs[i] as string, now: new Date(start + i) })),
-  );
-
-  const created = new Map((await listCampaignLinks(c.env.DB, campaign.id)).map((row) => [row.slug, row]));
-  const synced: LinkRow[] = [];
-  for (const slug of slugs) {
-    const row = created.get(slug);
-    if (row === undefined) throw new Error("a created link vanished");
-    synced.push(await writeThrough(c.env.DB, c.env.KV, row));
-    logScreening(screened, slug);
-  }
-  return c.json({ items: await toLinks(c.env.DB, synced, c.req.url) } satisfies CampaignLinks, 201);
-});
+  return { planned, details };
+}
 
 /** The given custom slugs, with a free generated slug drawn for each item that has none. */
 async function assignSlugs(db: D1Database, given: readonly (string | undefined)[]): Promise<string[]> {

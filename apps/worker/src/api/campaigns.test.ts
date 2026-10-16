@@ -1,10 +1,10 @@
 // Campaigns through the public API (ADR 0009 *Campaigns*, ADR 0012): create, list, rename, delete, bulk creation and
 // the member list. Screening of campaign writes is in screening.test.ts.
 
-import { Campaign, CampaignLinks, CampaignPage, Link, UpdatedCampaign } from "@furea/shared";
+import { Campaign, CampaignLinks, campaignUtmKey, CampaignPage, Link, UpdatedCampaign } from "@furea/shared";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { insertLink } from "../core/db/links.ts";
+import { insertCampaignLinks, insertLink } from "../core/db/links.ts";
 import { SESSION_COOKIE, startSession } from "./session.ts";
 
 const ORIGIN = "https://s.example.com";
@@ -208,6 +208,39 @@ describe("POST /api/v1/campaigns/:id/links", () => {
     // The message names the colliding value as stored.
     expect(error.details?.[0]?.["message"]).toMatch(/Newsletter \/ email/);
     expect(await countLinks()).toBe(before);
+  });
+
+  it("reports a slug or combination taken while it screened as validation_failed, creating nothing", async () => {
+    const campaign = await createCampaign({ name: "Bulk race" });
+    const before = await countLinks();
+    // Another write lands between validation and the insert: during the base URL's screening lookup.
+    const fetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      globalThis.fetch = fetch;
+      await insertLink(env.DB, { slug: "bulk-race", destination: "https://example.com/race" });
+      await insertCampaignLinks(env.DB, campaign.id, [
+        { slug: "bulk-race-b", destination: "https://shop.example/x", title: null, now: new Date(),
+          utmKey: campaignUtmKey({ source: "rival", medium: "web" }) },
+      ]);
+      return fetch(input, init);
+    };
+    try {
+      const res = await api("POST", `/campaigns/${campaign.id}/links`, {
+        items: [
+          { utm: { source: "fresh", medium: "web" }, slug: "bulk-race" },
+          { utm: { source: "Rival", medium: "web" } },
+        ],
+      });
+      const error = await errorOf(res, 400);
+      expect(error.code).toBe("validation_failed");
+      expect(error.details?.map(({ field, code, conflictsWith }) => ({ field, code, conflictsWith }))).toEqual([
+        { field: "items[0].slug", code: "slug_taken", conflictsWith: undefined },
+        { field: "items[1].utm", code: "utm_combination_taken", conflictsWith: { slug: "bulk-race-b" } },
+      ]);
+      expect(await countLinks()).toBe(before + 2);
+    } finally {
+      globalThis.fetch = fetch;
+    }
   });
 
   it("refuses items past the 50-link cap with campaign_link_limit, creating nothing", async () => {

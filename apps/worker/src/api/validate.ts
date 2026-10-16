@@ -5,7 +5,7 @@ import type { ErrorDetail } from "@furea/shared";
 import { createMiddleware } from "hono/factory";
 import type { z } from "zod";
 import type { ApiEnv } from "./context.ts";
-import { apiError } from "./errors.ts";
+import { apiError, validationFailed } from "./errors.ts";
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -27,7 +27,7 @@ export function jsonBody<S extends z.ZodType>(schema: S | ((url: URL) => S)) {
       return apiError(400, "invalid_json", "The body is not valid JSON.");
     }
     const result = (typeof schema === "function" ? schema(new URL(c.req.url)) : schema).safeParse(json);
-    if (!result.success) return validationFailed(result.error);
+    if (!result.success) return validationFailed(toDetails(result.error));
     c.set("body", result.data);
     await next();
   });
@@ -37,14 +37,10 @@ export function jsonBody<S extends z.ZodType>(schema: S | ((url: URL) => S)) {
 export function queryParams<S extends z.ZodType>(schema: S) {
   return createMiddleware<ApiEnv & { Variables: { query: z.infer<S> } }>(async (c, next) => {
     const result = schema.safeParse(c.req.query());
-    if (!result.success) return validationFailed(result.error);
+    if (!result.success) return validationFailed(toDetails(result.error));
     c.set("query", result.data);
     await next();
   });
-}
-
-function validationFailed(error: z.ZodError): Response {
-  return apiError(400, "validation_failed", "The request is invalid.", { details: toDetails(error) });
 }
 
 /** One entry per failing field. A schema names its own field code with `params: {code}` on a refinement. */

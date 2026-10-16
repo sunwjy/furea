@@ -137,6 +137,13 @@ describe("screenDestinations", () => {
     });
   });
 
+  it("fails open on a resolver error status (SERVFAIL, REFUSED)", async () => {
+    for (const Status of [2, 5]) {
+      const { fetch } = resolver({ "x.example": { Status } });
+      expect(await screenDestinations(one("https://x.example/"), { fetch })).toEqual({ flagged: [], unavailable: true });
+    }
+  });
+
   it("still reports a flagged host when another host's lookup failed", async () => {
     const { fetch } = resolver({
       "bad.example": BLOCKED,

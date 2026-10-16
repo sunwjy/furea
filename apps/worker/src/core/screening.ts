@@ -1,6 +1,7 @@
 // Destination screening against 1.1.1.1 for Families over DNS-over-HTTPS (ADR 0013). Domain-level only: one `A`
 // lookup per distinct host; a host is flagged when the answer carries EDE(16) (Censored) or a `0.0.0.0` record.
-// IP literals, NXDOMAIN and empty answers pass. A failed lookup never flags: the caller fails open.
+// IP literals, NXDOMAIN and empty answers pass. A failed lookup (including an RCODE other than NOERROR or
+// NXDOMAIN, such as SERVFAIL or REFUSED) never flags: the caller fails open.
 
 export const DOH_ENDPOINT = "https://security.cloudflare-dns.com/dns-query";
 export const SCREENING_TIMEOUT_MS = 1500;
@@ -28,9 +29,14 @@ export interface ScreeningOptions {
   timeoutMs?: number;
 }
 
+const NOERROR = 0;
+const NXDOMAIN = 3;
+
 type Verdict = "flagged" | "clean" | "unavailable";
 
 interface DohAnswer {
+  /** The DNS RCODE: 0 NOERROR, 3 NXDOMAIN; anything else (SERVFAIL, REFUSED, …) is a failed lookup. */
+  Status?: number;
   Answer?: { type?: number; data?: string }[];
   Comment?: string[] | string;
 }
@@ -66,6 +72,7 @@ async function lookup(host: string, { fetch, timeoutMs = SCREENING_TIMEOUT_MS }:
     const body = (await res.json()) as DohAnswer;
     const comments = Array.isArray(body.Comment) ? body.Comment : body.Comment ? [body.Comment] : [];
     if (comments.some((c) => /\bEDE\(16\)/.test(c))) return "flagged";
+    if (body.Status !== NOERROR && body.Status !== NXDOMAIN) return "unavailable";
     if ((body.Answer ?? []).some((a) => a.type === 1 && a.data === "0.0.0.0")) return "flagged";
     return "clean";
   } catch {

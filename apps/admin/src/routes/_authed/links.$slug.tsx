@@ -1,4 +1,11 @@
-import { Destination, Title, type Link as LinkResource, type UpdateLinkRequest } from "@furea/shared";
+import {
+  Destination,
+  STATS_RANGES,
+  Title,
+  type Link as LinkResource,
+  type StatsRange,
+  type UpdateLinkRequest,
+} from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -7,13 +14,16 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { AnalyticsHint, BarSeries, ESTIMATE_LABEL, TopList } from "@/components/analytics";
 import { EnableToggle, LinkBadges, SyncPendingNotice, useUpdateLink } from "@/components/link-status";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ScreeningRefusal } from "@/components/screening-refusal";
 import { UtmBuilder } from "@/components/utm-builder";
-import { ApiError, fieldDetails } from "@/lib/api";
+import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
 import { linkQuery } from "@/lib/links";
+import { analyticsMissing, browserTimeZone, linkStatsQuery } from "@/lib/stats";
 
 // Nothing static lives under `/links/`: any word there is also a valid custom slug, so the new-link page is `/new`.
 export const Route = createFileRoute("/_authed/links/$slug")({
@@ -81,7 +91,61 @@ function LinkDetails({ link }: { link: LinkResource }) {
           </div>
         </>
       )}
+      <LinkAnalytics slug={link.slug} />
     </>
+  );
+}
+
+const RANGE_LABELS: Record<StatsRange, string> = { "24h": "24 hours", "7d": "7 days", "30d": "30 days", "90d": "90 days" };
+
+/** The link's breakdowns for a range (ADR 0005), or the degraded hint; the lifetime total above stays either way. */
+function LinkAnalytics({ slug }: { slug: string }) {
+  const [range, setRange] = useState<StatsRange>("7d");
+  const stats = useQuery(linkStatsQuery(slug, range));
+  const missing = stats.isError ? analyticsMissing(stats.error) : null;
+
+  if (missing) return <AnalyticsHint missing={missing} dismissible={false} />;
+
+  return (
+    <section aria-label="Clicks" className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-heading text-base font-semibold">Clicks</h2>
+        <div role="tablist" aria-label="Range" className="flex gap-1">
+          {STATS_RANGES.map((r) => (
+            <Button
+              key={r}
+              role="tab"
+              aria-selected={r === range}
+              variant={r === range ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setRange(r)}
+            >
+              {RANGE_LABELS[r]}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {ESTIMATE_LABEL}, in {browserTimeZone()} {range === "24h" ? "hours" : "days"}.
+      </p>
+      {stats.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : stats.isError ? (
+        <p className="text-sm text-destructive">Could not load the click breakdowns.</p>
+      ) : (
+        <>
+          <BarSeries points={stats.data.series} range={range} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <TopList title="Countries" rows={stats.data.countries.map((r) => ({ label: r.country, clicks: r.clicks }))} />
+            <TopList title="Referrers" rows={stats.data.referrerHosts.map((r) => ({ label: r.host, clicks: r.clicks }))} />
+            <TopList
+              title="Devices"
+              rows={stats.data.deviceClasses.map((r) => ({ label: r.deviceClass, clicks: r.clicks }))}
+            />
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -99,6 +163,9 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
     defaultValues: { destination: link.destination, title: link.title ?? "" },
   });
   const { errors, isSubmitting } = form.formState;
+  const destination = form.watch("destination");
+  // The refused request, kept for "Save anyway"; it lapses once the destination is edited.
+  const [refused, setRefused] = useState<{ host: string; body: UpdateLinkRequest } | null>(null);
 
   // The builder's output replaces the destination; it is validated as typed once the form was submitted.
   function composeDestination(destination: string) {
@@ -110,11 +177,21 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
     const body: UpdateLinkRequest = {};
     if (destination !== link.destination) body.destination = destination;
     if (title !== link.title) body.title = title;
+    await send(body);
+  });
+
+  async function send(body: UpdateLinkRequest) {
+    setRefused(null);
     try {
       await update.mutateAsync(body);
       toast.success(`Saved /${link.slug}.`);
       onDone();
     } catch (error) {
+      const host = flaggedHost(error, "destination");
+      if (host !== null) {
+        setRefused({ host, body });
+        return;
+      }
       const fieldErrors = fieldDetails(error, FIELDS);
       if (fieldErrors.length === 0) {
         toast.error(error instanceof ApiError ? error.message : "Could not save the link. Try again.");
@@ -122,7 +199,7 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
       }
       for (const detail of fieldErrors) form.setError(detail.field, { message: detail.message });
     }
-  });
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -139,7 +216,15 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
           />
           <FieldError errors={[errors.destination]} />
         </Field>
-        <UtmBuilder destination={form.watch("destination")} onCompose={composeDestination} />
+        {refused !== null && refused.body.destination === destination && (
+          <ScreeningRefusal
+            host={refused.host}
+            action="Save anyway"
+            pending={update.isPending || isSubmitting}
+            onOverride={() => void send({ ...refused.body, screening: "skip" })}
+          />
+        )}
+        <UtmBuilder destination={destination} onCompose={composeDestination} />
         <Field data-invalid={errors.title ? true : undefined}>
           <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
           <Input id="title" aria-invalid={errors.title ? true : undefined} {...form.register("title")} />

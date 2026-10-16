@@ -59,11 +59,21 @@ export const Title = z
   .nullable()
   .describe(`Trimmed, at most ${TITLE_MAX_LENGTH} characters; empty or null means no title.`);
 
+/**
+ * Destination screening override (ADR 0013): `"skip"` saves a destination that screening flagged. Accepted from a
+ * session only; an API key sending it is refused with 403. Never stored.
+ */
+export const ScreeningOverride = z
+  .literal("skip")
+  .optional()
+  .describe('"skip" saves a destination screening flagged (destination_flagged); from a session only, never stored.');
+
 /** `POST /links`. With `slug` it is a custom slug, without it a generated one. */
 export const CreateLinkRequest = z.strictObject({
   destination: Destination,
   slug: CustomSlug.optional(),
   title: Title.optional(),
+  screening: ScreeningOverride,
 });
 export type CreateLinkRequest = z.input<typeof CreateLinkRequest>;
 export type CreateLinkBody = z.output<typeof CreateLinkRequest>;
@@ -83,6 +93,7 @@ export const UpdateLinkRequest = z.strictObject({
   title: Title.optional(),
   enabled: z.boolean().optional().describe("false disables the link, true enables it again."),
   slug: ImmutableSlug.optional(),
+  screening: ScreeningOverride,
 });
 export type UpdateLinkRequest = Omit<z.input<typeof UpdateLinkRequest>, "slug">;
 export type UpdateLinkBody = Omit<z.output<typeof UpdateLinkRequest>, "slug">;

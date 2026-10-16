@@ -26,6 +26,13 @@ export function fieldDetails<F extends string>(error: unknown, fields: readonly 
   return error.details.filter((d): d is ErrorDetail & { field: F } => (fields as readonly string[]).includes(d.field));
 }
 
+/** The host screening flagged in `field` when the API refused the write with `destination_flagged` (ADR 0013). */
+export function flaggedHost(error: unknown, field: string): string | null {
+  if (!(error instanceof ApiError) || error.code !== "destination_flagged") return null;
+  const host = error.details.find((d) => d.field === field)?.["host"];
+  return typeof host === "string" ? host : null;
+}
+
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;

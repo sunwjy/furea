@@ -1,14 +1,16 @@
-import { Destination, type Settings } from "@furea/shared";
+import { Destination, type Settings, type UpdateSettingsRequest } from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ScreeningRefusal } from "@/components/screening-refusal";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ApiError, fieldDetails } from "@/lib/api";
+import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
 import { settingsQuery, updateSettings } from "@/lib/settings";
 
 export const Route = createFileRoute("/_authed/settings")({
@@ -56,9 +58,17 @@ function InstanceFacts({ settings }: { settings: Settings }) {
           ) : (
             <>
               <span>Not configured</span>
-              <span className="block text-muted-foreground">
-                Add a token with <code>npx furea analytics-token</code> for click estimates.
-              </span>
+              {settings.analyticsMissing.includes("binding") ? (
+                <span className="block text-muted-foreground">
+                  No Analytics Engine binding: enable Analytics Engine on the Cloudflare account, then run{" "}
+                  <code>npx furea deploy</code> again.
+                </span>
+              ) : null}
+              {settings.analyticsMissing.includes("token") ? (
+                <span className="block text-muted-foreground">
+                  No analytics token: add one with <code>npx furea analytics-token</code> for click estimates.
+                </span>
+              ) : null}
             </>
           )}
         </dd>
@@ -84,13 +94,25 @@ function RootDestinationForm({ settings }: { settings: Settings }) {
     values: { rootDestination: settings.rootDestination ?? "" },
   });
   const { errors, isSubmitting } = form.formState;
+  const typed = form.watch("rootDestination");
+  // The refused request, kept for "Save anyway"; it lapses once the field is edited.
+  const [refused, setRefused] = useState<{ host: string; body: UpdateSettingsRequest } | null>(null);
+  const [overriding, setOverriding] = useState(false);
 
-  const onSubmit = form.handleSubmit(async ({ rootDestination }) => {
+  const onSubmit = form.handleSubmit(({ rootDestination }) => send({ rootDestination }));
+
+  async function send(body: UpdateSettingsRequest) {
+    setRefused(null);
     try {
-      const saved = await updateSettings({ rootDestination });
+      const saved = await updateSettings(body);
       queryClient.setQueryData(settingsQuery.queryKey, saved);
       toast.success(saved.rootDestination === null ? "Root destination removed." : "Root destination saved.");
     } catch (error) {
+      const host = flaggedHost(error, "rootDestination");
+      if (host !== null) {
+        setRefused({ host, body });
+        return;
+      }
       const fieldErrors = fieldDetails(error, ["rootDestination"] as const);
       if (fieldErrors.length === 0) {
         toast.error(error instanceof ApiError ? error.message : "Could not save the settings. Try again.");
@@ -98,7 +120,16 @@ function RootDestinationForm({ settings }: { settings: Settings }) {
       }
       for (const detail of fieldErrors) form.setError(detail.field, { message: detail.message });
     }
-  });
+  }
+
+  async function saveAnyway(body: UpdateSettingsRequest) {
+    setOverriding(true);
+    try {
+      await send({ ...body, screening: "skip" });
+    } finally {
+      setOverriding(false);
+    }
+  }
 
   return (
     <section aria-labelledby="root-heading" className="flex flex-col gap-3">
@@ -122,6 +153,14 @@ function RootDestinationForm({ settings }: { settings: Settings }) {
             </FieldDescription>
             <FieldError errors={[errors.rootDestination]} />
           </Field>
+          {refused !== null && refused.body.rootDestination === typed.trim() && (
+            <ScreeningRefusal
+              host={refused.host}
+              action="Save anyway"
+              pending={overriding || isSubmitting}
+              onOverride={() => void saveAnyway(refused.body)}
+            />
+          )}
           <Button type="submit" className="self-start" disabled={isSubmitting}>
             {isSubmitting ? "Saving…" : "Save"}
           </Button>

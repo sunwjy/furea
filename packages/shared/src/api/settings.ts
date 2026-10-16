@@ -2,7 +2,7 @@
 // destination; ADR 0003 password policy).
 
 import { z } from "zod";
-import { Destination } from "./links.ts";
+import { Destination, ScreeningOverride } from "./links.ts";
 
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 256;
@@ -51,10 +51,13 @@ export const UpdateSettingsRequest = z.strictObject({
         "null turns it off.",
     ),
   analyticsConfigured: ReadOnly("analyticsConfigured").optional(),
+  analyticsMissing: ReadOnly("analyticsMissing").optional(),
   version: ReadOnly("version").optional(),
+  screening: ScreeningOverride,
 });
-export type UpdateSettingsRequest = Omit<z.input<typeof UpdateSettingsRequest>, "analyticsConfigured" | "version">;
-export type UpdateSettingsBody = Omit<z.output<typeof UpdateSettingsRequest>, "analyticsConfigured" | "version">;
+type ReadOnlyField = "analyticsConfigured" | "analyticsMissing" | "version";
+export type UpdateSettingsRequest = Omit<z.input<typeof UpdateSettingsRequest>, ReadOnlyField>;
+export type UpdateSettingsBody = Omit<z.output<typeof UpdateSettingsRequest>, ReadOnlyField>;
 
 export const AccessSettings = z.object({ teamDomain: z.string(), aud: z.string() });
 export type AccessSettings = z.infer<typeof AccessSettings>;
@@ -64,8 +67,13 @@ export const Settings = z.object({
   rootDestination: z.string().nullable(),
   /** Cloudflare Access mode; `null` while it is off. */
   access: AccessSettings.nullable(),
-  /** Whether the analytics token is placed (by the installer); read-only. */
+  /** Whether click breakdowns work: the analytics token is placed and the CLICKS binding exists; read-only. */
   analyticsConfigured: z.boolean(),
+  /**
+   * What stops breakdowns, empty when they work: `binding` (no Analytics Engine on the account) and/or `token` (no
+   * analytics token). Read-only.
+   */
+  analyticsMissing: z.array(z.enum(["binding", "token"])),
   /** The deployed furea version; read-only. */
   version: z.string(),
 });

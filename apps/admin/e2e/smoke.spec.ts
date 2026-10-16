@@ -195,7 +195,39 @@ test("7. set a root destination on the Settings page, land on it from /, and uns
   expect(await unset.text()).toBe(await (await page.request.get("/no-such-link")).text());
 });
 
-test("8. see the Cloudflare Access form on the Security page and have a non-team domain refused", async () => {
+test("8. open the stats page and see the estimates unavailable state, with no analytics token", async () => {
+  // The local instance has the CLICKS binding but no ANALYTICS_TOKEN secret.
+  const res = await page.request.get("/api/v1/stats?range=7d&tz=Asia/Seoul");
+  expect(res.status()).toBe(503);
+  expect(await res.json()).toMatchObject({
+    error: { code: "analytics_unavailable", details: [{ field: "ANALYTICS_TOKEN", code: "token_missing" }] },
+  });
+
+  await page.goto("/admin/");
+  const hint = page.getByRole("note", { name: "Estimates unavailable" });
+  await expect(hint).toContainText("Estimates unavailable: no analytics token.");
+  await expect(page.getByLabel("Overview")).toHaveCount(0);
+  const card = page.getByRole("list", { name: "Links" }).getByRole("listitem").filter({ hasText: `/${SLUG}` });
+  await expect(card.getByText("2 clicks", { exact: true })).toBeVisible();
+  await expect(card.getByRole("img")).toHaveCount(0);
+
+  // The link's own page: the lifetime total stays, the breakdowns give way to the hint.
+  await card.getByRole("link", { name: `E2E edited · ${DESTINATION}` }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/links/${SLUG}$`));
+  await expect(page.getByRole("note", { name: "Estimates unavailable" })).toContainText("no analytics token");
+  await expect(page.getByRole("definition").filter({ hasText: /^2$/ })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Range" })).toHaveCount(0);
+
+  // Dismissed on the feed, it stays dismissed in this browser.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Links" }).click();
+  await hint.getByRole("button", { name: "Dismiss" }).click();
+  await expect(hint).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Links" })).toBeVisible();
+  await expect(hint).toHaveCount(0);
+});
+
+test("9. see the Cloudflare Access form on the Security page and have a non-team domain refused", async () => {
   // Turning Access mode on needs a real Access team's public keys, which E2E never fetches; the Worker side of
   // Access mode is covered in the Workers pool with a stand-in team.
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Security" }).click();

@@ -73,6 +73,8 @@ describe("GET /api/v1/settings", () => {
       rootDestination: null,
       access: null,
       analyticsConfigured: false,
+      // The test instance has the CLICKS binding but no analytics token.
+      analyticsMissing: ["token"],
       version: env.FUREA_VERSION,
     });
   });

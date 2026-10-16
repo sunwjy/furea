@@ -190,6 +190,15 @@ describe("with Access mode on", () => {
     expect(res.status).toBe(403);
   });
 
+  it("lets the Access operator override screening, as a password session may", async () => {
+    const res = await call("/links", {
+      method: "POST",
+      body: { destination: "https://example.com/access-skip", slug: "access-skip", screening: "skip" },
+      cookie: `CF_Authorization=${await team.sign()}`,
+    });
+    expect(res.status).toBe(201);
+  });
+
   it("leaves API keys working", async () => {
     const res = await call("/auth/session", { bearer: keys.write });
     expect(await res.json()).toMatchObject({ kind: "apiKey", scope: "write" });

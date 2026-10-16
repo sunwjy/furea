@@ -17,6 +17,7 @@ import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
 import { destinationFor } from "./destination.ts";
 import { apiError, notFound } from "./errors.ts";
+import { logScreening, screen } from "./screening.ts";
 import { requireCaller, requireWrite } from "./session.ts";
 import { jsonBody, queryParams } from "./validate.ts";
 
@@ -29,7 +30,9 @@ const createLinkRequestFor = (url: URL) => CreateLinkRequest.extend({ destinatio
 const updateLinkRequestFor = (url: URL) => UpdateLinkRequest.extend({ destination: destinationFor(url).optional() });
 
 links.post("/", requireWrite, jsonBody(createLinkRequestFor), async (c) => {
-  const { destination, slug, title } = c.var.body;
+  const { destination, slug, title, screening } = c.var.body;
+  const screened = await screen(c.var.caller, [{ field: "destination", url: destination }], screening);
+  if (screened instanceof Response) return screened;
   let stored: string | null = null;
   if (slug !== undefined) {
     if (!(await insertLink(c.env.DB, { slug, destination, title }))) {
@@ -46,6 +49,7 @@ links.post("/", requireWrite, jsonBody(createLinkRequestFor), async (c) => {
 
   const row = await getLink(c.env.DB, stored);
   if (row === null) throw new Error("a created link vanished");
+  logScreening(screened, row.slug);
   return c.json(toLink(await writeThrough(c.env.DB, c.env.KV, row), c.req.url), 201);
 });
 
@@ -68,11 +72,18 @@ links.get("/:slug", requireCaller, async (c) => {
   return c.json(toLink(row, c.req.url));
 });
 
-// A merge-patch (ADR 0009). The cache entry is written even when nothing changed, so `PATCH {}` repairs it.
+// A merge-patch (ADR 0009). The cache entry is written even when nothing changed, so `PATCH {}` repairs it. A
+// destination is screened whenever it is present, even when its host is the link's current one (ADR 0013).
 links.patch("/:slug", requireWrite, jsonBody(updateLinkRequestFor), async (c) => {
-  const { destination, title, enabled } = c.var.body;
-  const row = await updateLink(c.env.DB, c.req.param("slug"), { destination, title, enabled });
+  const { destination, title, enabled, screening } = c.var.body;
+  const slug = c.req.param("slug");
+  if (destination !== undefined && (await getLink(c.env.DB, slug)) === null) return notFound();
+  const destinations = destination === undefined ? [] : [{ field: "destination", url: destination }];
+  const screened = await screen(c.var.caller, destinations, screening);
+  if (screened instanceof Response) return screened;
+  const row = await updateLink(c.env.DB, slug, { destination, title, enabled });
   if (row === null) return notFound();
+  logScreening(screened, row.slug);
   return c.json(toLink(await writeThrough(c.env.DB, c.env.KV, row), c.req.url));
 });
 

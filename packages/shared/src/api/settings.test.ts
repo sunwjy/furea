@@ -29,8 +29,11 @@ describe("UpdateSettingsRequest", () => {
   });
 
   it("refuses the read-only fields with any value as read_only_field", () => {
-    expect(codes(UpdateSettingsRequest.safeParse({ analyticsConfigured: true, version: "9.9.9" }))).toEqual([
+    expect(
+      codes(UpdateSettingsRequest.safeParse({ analyticsConfigured: true, analyticsMissing: [], version: "9.9.9" })),
+    ).toEqual([
       { path: "analyticsConfigured", code: "read_only_field" },
+      { path: "analyticsMissing", code: "read_only_field" },
       { path: "version", code: "read_only_field" },
     ]);
   });
@@ -97,7 +100,13 @@ describe("ChangePasswordRequest", () => {
 
 describe("Settings", () => {
   it("parses the settings document", () => {
-    const document = { rootDestination: null, access: null, analyticsConfigured: false, version: "1.2.3" };
+    const document = {
+      rootDestination: null,
+      access: null,
+      analyticsConfigured: false,
+      analyticsMissing: ["binding", "token"],
+      version: "1.2.3",
+    };
     expect(Settings.parse(document)).toEqual(document);
   });
 });

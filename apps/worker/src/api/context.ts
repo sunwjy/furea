@@ -26,5 +26,9 @@ export type Caller = SessionCaller | AccessCaller | ApiKeyCaller;
 
 export interface ApiEnv {
   Bindings: Env;
-  Variables: { caller: Caller | null };
+  Variables: {
+    caller: Caller | null;
+    /** The `fetch` the Analytics Engine SQL client uses; injected by `createWorker` so tests replay canned answers. */
+    sqlFetch: typeof globalThis.fetch;
+  };
 }

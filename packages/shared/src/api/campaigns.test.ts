@@ -6,7 +6,9 @@ import {
   CampaignPage,
   CreateCampaignRequest,
   ListCampaignsQuery,
+  UpdateCampaignLinksRequest,
   UpdateCampaignRequest,
+  UpdatedCampaignLinks,
 } from "./campaigns.ts";
 
 function codes(result: { success: boolean; error?: { issues: { path: PropertyKey[]; code: string; params?: unknown }[] } }) {
@@ -98,6 +100,39 @@ describe("UpdateCampaignRequest", () => {
       { path: "clickCount", code: "read_only_field" },
       { path: "syncPendingLinkCount", code: "read_only_field" },
     ]);
+  });
+});
+
+describe("UpdateCampaignRequest rewriting fields", () => {
+  it("trims the base URL's companions, keeps their case, and reads an empty or null utmId as none", () => {
+    expect(
+      UpdateCampaignRequest.parse({ baseUrl: "https://example.com/new", utmCampaign: " Autumn ", utmId: "  " }),
+    ).toEqual({ baseUrl: "https://example.com/new", utmCampaign: "Autumn", utmId: null });
+    expect(UpdateCampaignRequest.parse({ utmId: null, screening: "skip" })).toEqual({ utmId: null, screening: "skip" });
+  });
+
+  it("refuses a base URL with utm_* or breaking the destination rules, and an empty UTM campaign", () => {
+    expect(
+      codes(UpdateCampaignRequest.safeParse({ baseUrl: "https://example.com/?utm_source=x", utmCampaign: "  " })),
+    ).toEqual([
+      { path: "baseUrl", code: "base_url_has_utm" },
+      { path: "utmCampaign", code: "too_small" },
+    ]);
+    expect(codes(UpdateCampaignRequest.safeParse({ baseUrl: "ftp://example.com/", utmCampaign: null }))).toEqual([
+      { path: "baseUrl", code: "destination_invalid" },
+      { path: "utmCampaign", code: "invalid_type" },
+    ]);
+  });
+});
+
+describe("UpdateCampaignLinksRequest", () => {
+  it("takes enabled, and nothing else", () => {
+    expect(UpdateCampaignLinksRequest.parse({ enabled: false })).toEqual({ enabled: false });
+    expect(codes(UpdateCampaignLinksRequest.safeParse({ enabled: "no", destination: "x" }))).toEqual([
+      { path: "enabled", code: "invalid_type" },
+      { path: "", code: "unrecognized_keys" },
+    ]);
+    expect(UpdatedCampaignLinks.parse({ updated: 3 })).toEqual({ updated: 3 });
   });
 });
 

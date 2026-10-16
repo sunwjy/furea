@@ -338,3 +338,39 @@ test("12. open the campaign page without an analytics token: lifetime total and 
   await page.getByRole("tab", { name: "By source" }).click();
   await expect(page.getByRole("table", { name: "Links by source" }).getByRole("row").nth(1)).toContainText("Newsletter");
 });
+
+test("13. edit a campaign link's UTM values, rewrite the campaign's base URL, and disable and enable all", async () => {
+  // A campaign link's own values: the warning about past clicks, then the recomposed destination.
+  await page.goto("/admin/links/e2e-spring-news");
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByText("past clicks will count under the new values", { exact: false })).toBeVisible();
+  await page.getByLabel("Source").fill("Mail");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved /e2e-spring-news.")).toBeVisible();
+  await expect(page.getByRole("definition").first()).toContainText("utm_source=Mail&utm_medium=email");
+
+  // A base URL edit confirms the link count, then rewrites every member.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Campaigns" }).click();
+  await page.getByRole("table", { name: "Campaigns" }).getByRole("link", { name: "E2E Spring" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Base URL").fill(`http://127.0.0.1:${PORT}/robots.txt?from=autumn#top`);
+  await page.getByRole("button", { name: "Save" }).click();
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toContainText("all 2 links in the campaign");
+  await confirm.getByRole("button", { name: "Rewrite 2 links" }).click();
+  await expect(page.getByText("Saved E2E Spring; rewrote 2 links.")).toBeVisible();
+  const rewritten = await page.request.get("/e2e-spring-news", { maxRedirects: 0 });
+  expect(rewritten.headers()["location"]).toBe(
+    `http://127.0.0.1:${PORT}/robots.txt?from=autumn` +
+      "&utm_source=Mail&utm_medium=email&utm_campaign=E2E%20Spring#top",
+  );
+
+  // Disable all answers 404 on every short URL until Enable all.
+  await page.getByRole("button", { name: "Disable all" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Disable all" }).click();
+  await expect(page.getByText("Disabled 2 links.")).toBeVisible();
+  expect((await page.request.get("/e2e-spring-news", { maxRedirects: 0 })).status()).toBe(404);
+  await page.getByRole("button", { name: "Enable all" }).click();
+  await expect(page.getByText("Enabled 2 links.")).toBeVisible();
+  expect((await page.request.get("/e2e-spring-news", { maxRedirects: 0 })).status()).toBe(302);
+});

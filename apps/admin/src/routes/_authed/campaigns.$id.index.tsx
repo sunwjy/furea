@@ -9,7 +9,7 @@ import {
 } from "@furea/shared";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -32,6 +32,7 @@ import {
   Tiles,
   TopList,
 } from "@/components/analytics";
+import { CampaignBulkToggle, CampaignEditForm } from "@/components/campaign-edit";
 import { LinkBadges } from "@/components/link-status";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -76,6 +77,7 @@ function CampaignHeader({ campaign }: { campaign: Campaign }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
   const remove = useMutation({
     mutationFn: () => deleteCampaign(campaign.id),
     onSuccess: async () => {
@@ -97,7 +99,8 @@ function CampaignHeader({ campaign }: { campaign: Campaign }) {
           <Badge variant="outline">{campaign.syncPendingLinkCount} sync pending</Badge>
         ) : null}
       </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+      {editing ? <CampaignEditForm campaign={campaign} onDone={() => setEditing(false)} /> : null}
+      <dl className={editing ? "hidden" : "grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm"}>
         <dt className="text-muted-foreground">Base URL</dt>
         <dd className="break-all">{campaign.baseUrl}</dd>
         <dt className="text-muted-foreground">UTM campaign</dt>
@@ -107,7 +110,11 @@ function CampaignHeader({ campaign }: { campaign: Campaign }) {
         <dt className="text-muted-foreground">Campaign ID</dt>
         <dd>{campaign.utmId === null ? <span className="text-muted-foreground">None</span> : <code>{campaign.utmId}</code>}</dd>
       </dl>
-      <div className="flex flex-wrap gap-2">
+      <div className={editing ? "hidden" : "flex flex-wrap gap-2"}>
+        <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          <Pencil data-icon="inline-start" />
+          Edit
+        </Button>
         {full ? (
           <Button size="sm" disabled>
             <Plus data-icon="inline-start" />
@@ -119,6 +126,7 @@ function CampaignHeader({ campaign }: { campaign: Campaign }) {
             Add links
           </Link>
         )}
+        <CampaignBulkToggle campaign={campaign} />
         <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setConfirming(true)}>
           <Trash2 data-icon="inline-start" />
           Delete campaign

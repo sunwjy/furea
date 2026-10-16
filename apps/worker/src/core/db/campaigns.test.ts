@@ -8,8 +8,17 @@ import {
   insertCampaign,
   listCampaigns,
   renameCampaign,
+  updateCampaign,
 } from "./campaigns.ts";
-import { getLink, insertCampaignLinks, insertLink, listCampaignLinks, markSyncPending, updateLink } from "./links.ts";
+import {
+  getLink,
+  insertCampaignLinks,
+  insertLink,
+  listCampaignLinks,
+  markSyncPending,
+  setCampaignLinksEnabled,
+  updateLink,
+} from "./links.ts";
 
 const T0 = new Date("2026-10-10T00:00:00.000Z");
 
@@ -170,5 +179,50 @@ describe("campaigns", () => {
     expect((await listCampaigns(env.DB, { limit: 10, q: "ZETA_" })).map((row) => row.id)).toEqual(["listAlpha001"]);
     expect((await listCampaigns(env.DB, { limit: 10, q: "list g" })).map((row) => row.id)).toEqual(["listGamma001"]);
     expect(await listCampaigns(env.DB, { limit: 10, q: "%" })).toEqual([]);
+  });
+
+  it("updates the shared values and rewrites the given members in one batch, leaving other links alone", async () => {
+    await campaign("cmpRewrite01", "Rewrite db");
+    await insertCampaignLinks(env.DB, "cmpRewrite01", [member("rwdb-a", "a", "m"), member("rwdb-b", "b", "m")]);
+    await insertLink(env.DB, { slug: "rwdb-plain", destination: "https://example.com/plain", now: T0 });
+    const later = new Date(T0.getTime() + 1000);
+
+    const row = await updateCampaign(
+      env.DB,
+      "cmpRewrite01",
+      { baseUrl: "https://example.com/new", utmCampaign: "autumn", utmId: "q3" },
+      [
+        { slug: "rwdb-a", destination: "https://example.com/new?utm_source=a" },
+        // A slug outside the campaign is never touched, whatever the caller passes.
+        { slug: "rwdb-plain", destination: "https://example.com/hijacked" },
+      ],
+      later,
+    );
+    expect(row).toMatchObject({
+      base_url: "https://example.com/new",
+      utm_campaign: "autumn",
+      utm_id: "q3",
+      updated_at: later.toISOString(),
+    });
+    expect(await getLink(env.DB, "rwdb-a")).toMatchObject({
+      destination: "https://example.com/new?utm_source=a",
+      updated_at: later.toISOString(),
+    });
+    expect((await getLink(env.DB, "rwdb-b"))?.updated_at).toBe(T0.toISOString());
+    expect((await getLink(env.DB, "rwdb-plain"))?.destination).toBe("https://example.com/plain");
+    expect(await updateCampaign(env.DB, "cmpRewrite01", { utmId: null }, [], later)).toMatchObject({ utm_id: null });
+  });
+
+  it("sets enabled on every member and returns them as stored", async () => {
+    await campaign("cmpToggle001", "Toggle db");
+    await insertCampaignLinks(env.DB, "cmpToggle001", [member("tgdb-a", "a", "m"), member("tgdb-b", "b", "m")]);
+    const later = new Date(T0.getTime() + 1000);
+
+    const rows = await setCampaignLinksEnabled(env.DB, "cmpToggle001", false, later);
+    expect(rows.map((r) => [r.slug, r.enabled, r.updated_at]).sort()).toEqual([
+      ["tgdb-a", 0, later.toISOString()],
+      ["tgdb-b", 0, later.toISOString()],
+    ]);
+    expect(await setCampaignLinksEnabled(env.DB, "cmpMissing03", true, later)).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ import {
   ListCampaignsQuery,
   parseUtm,
   randomAlphabetString,
+  UpdateCampaignLinksRequest,
   UpdateCampaignRequest,
   type Campaign,
   type CampaignLinkUtm,
@@ -19,6 +20,7 @@ import {
   type CampaignPage,
   type ErrorDetail,
   type UpdatedCampaign,
+  type UpdatedCampaignLinks,
 } from "@furea/shared";
 import { Hono } from "hono";
 import {
@@ -27,16 +29,23 @@ import {
   getCampaign,
   insertCampaign,
   listCampaigns,
-  renameCampaign,
+  updateCampaign,
   type CampaignRow,
+  type RewrittenDestination,
 } from "../core/db/campaigns.ts";
-import { createdAtOf, insertCampaignLinks, listCampaignLinks, type LinkRow } from "../core/db/links.ts";
+import {
+  createdAtOf,
+  insertCampaignLinks,
+  listCampaignLinks,
+  setCampaignLinksEnabled,
+  type LinkRow,
+} from "../core/db/links.ts";
 import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
 import { baseUrlFor, destinationFor } from "./destination.ts";
 import { apiError, notFound } from "./errors.ts";
-import { toLinks } from "./link-resource.ts";
+import { toLinks, utmOf } from "./link-resource.ts";
 import { logScreening, screen } from "./screening.ts";
 import { requireCaller, requireWrite } from "./session.ts";
 import { jsonBody, queryParams } from "./validate.ts";
@@ -48,6 +57,7 @@ const CAMPAIGN_ID_LENGTH = 12;
 const GENERATED_SLUG_ROUNDS = 5;
 
 const createCampaignRequestFor = (url: URL) => CreateCampaignRequest.extend({ baseUrl: baseUrlFor(url) });
+const updateCampaignRequestFor = (url: URL) => UpdateCampaignRequest.extend({ baseUrl: baseUrlFor(url).optional() });
 
 const nameTaken = (name: string) =>
   apiError(409, "campaign_name_taken", `Another campaign is already named "${name}" (compared ignoring case).`);
@@ -88,14 +98,69 @@ campaigns.get("/:id", requireCaller, async (c) => {
   return row === null ? notFound() : c.json(toCampaign(row));
 });
 
-// A merge-patch (ADR 0009). Renaming rewrites no link; the fields that do arrive with campaign edits (ADR 0012).
-campaigns.patch("/:id", requireWrite, jsonBody(UpdateCampaignRequest), async (c) => {
-  const { name } = c.var.body;
+// A merge-patch (ADR 0009). Renaming rewrites no link; a change to the base URL, the UTM campaign or `utm_id`
+// rewrites every member, disabled ones included, in the campaign's own D1 batch, then writes each through (ADR 0012
+// *Rewrites*). Sending a value the campaign already has rewrites nothing.
+campaigns.patch("/:id", requireWrite, jsonBody(updateCampaignRequestFor), async (c) => {
+  const { name, baseUrl, utmCampaign, utmId, screening } = c.var.body;
   const id = c.req.param("id");
-  const row = name === undefined ? await getCampaign(c.env.DB, id) : await renameCampaign(c.env.DB, id, name);
+  const current = await getCampaign(c.env.DB, id);
+  if (current === null) return notFound();
+  const next: CampaignRow = {
+    ...current,
+    base_url: baseUrl ?? current.base_url,
+    utm_campaign: utmCampaign ?? current.utm_campaign,
+    utm_id: utmId === undefined ? current.utm_id : utmId,
+  };
+  const rewrites =
+    next.base_url !== current.base_url || next.utm_campaign !== current.utm_campaign || next.utm_id !== current.utm_id;
+
+  const rewritten: RewrittenDestination[] = [];
+  if (rewrites) {
+    // Every member is recomposed before anything is written; one too long refuses the edit as a whole (ADR 0014).
+    const destination = destinationFor(new URL(c.req.url));
+    const details: ErrorDetail[] = [];
+    for (const row of await listCampaignLinks(c.env.DB, id)) {
+      const composed = composeCampaignLink(next, utmOf(row.destination));
+      if (!destination.safeParse(composed).success) {
+        details.push({
+          field: "baseUrl",
+          code: "rewrite_too_long",
+          slug: row.slug,
+          message: `The destination of /${row.slug} would be longer than 2048 characters.`,
+        });
+      }
+      rewritten.push({ slug: row.slug, destination: composed });
+    }
+    if (details.length > 0) return apiError(400, "validation_failed", "The request is invalid.", { details });
+  }
+
+  // A rewriting edit is screened once, on the base URL every member shares (ADR 0012, ADR 0013).
+  const screened = await screen(c.var.caller, rewrites ? [{ field: "baseUrl", url: next.base_url }] : [], screening);
+  if (screened instanceof Response) return screened;
+
+  const row = await updateCampaign(c.env.DB, id, { name, baseUrl, utmCampaign, utmId }, rewritten);
   if (row === "taken") return nameTaken(name ?? "");
   if (row === null) return notFound();
-  return c.json({ ...toCampaign(row), rewrittenLinkCount: 0 } satisfies UpdatedCampaign);
+  if (rewritten.length === 0) return c.json({ ...toCampaign(row), rewrittenLinkCount: 0 } satisfies UpdatedCampaign);
+
+  const slugs = new Set(rewritten.map((link) => link.slug));
+  for (const member of await listCampaignLinks(c.env.DB, id)) {
+    if (slugs.has(member.slug)) await writeThrough(c.env.DB, c.env.KV, member);
+  }
+  logScreening(screened, { campaign: id });
+  const after = await getCampaign(c.env.DB, id);
+  if (after === null) throw new Error("an edited campaign vanished");
+  return c.json({ ...toCampaign(after), rewrittenLinkCount: rewritten.length } satisfies UpdatedCampaign);
+});
+
+// Disable all / enable all (ADR 0012 *Bulk operations*): a merge-patch applied to every member, each written through.
+campaigns.patch("/:id/links", requireWrite, jsonBody(UpdateCampaignLinksRequest), async (c) => {
+  const id = c.req.param("id");
+  if ((await getCampaign(c.env.DB, id)) === null) return notFound();
+  const rows = await setCampaignLinksEnabled(c.env.DB, id, c.var.body.enabled);
+  for (const row of rows) await writeThrough(c.env.DB, c.env.KV, row);
+  return c.json({ updated: rows.length } satisfies UpdatedCampaignLinks);
 });
 
 // Detaches every member and deletes the campaign; links are never deleted or disabled (ADR 0012), so neither their
@@ -171,7 +236,7 @@ campaigns.post("/:id/links", requireWrite, jsonBody(BulkCreateCampaignLinksReque
     } else {
       seenKeys.set(utmKey, i);
     }
-    const composed = compose(campaign, item.utm);
+    const composed = composeCampaignLink(campaign, item.utm);
     if (!destination.safeParse(composed).success) {
       details.push({
         field: `items[${i}].utm`,
@@ -228,7 +293,8 @@ async function assignSlugs(db: D1Database, given: readonly (string | undefined)[
   return slugs as string[];
 }
 
-function compose(campaign: CampaignRow, utm: CampaignLinkUtm): string {
+/** A campaign link's destination: the campaign's shared part and the link's own values (ADR 0012, ADR 0014). */
+export function composeCampaignLink(campaign: CampaignRow, utm: CampaignLinkUtm): string {
   return composeUtm(campaign.base_url, {
     utm_id: campaign.utm_id ?? "",
     utm_source: utm.source,

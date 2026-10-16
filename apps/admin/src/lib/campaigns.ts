@@ -5,6 +5,7 @@ import {
   CampaignLinks,
   CampaignPage,
   UpdatedCampaign,
+  UpdatedCampaignLinks,
   type BulkCreateCampaignLinksRequest,
   type CreateCampaignRequest,
   type UpdateCampaignRequest,
@@ -53,6 +54,10 @@ export const createCampaign = (body: CreateCampaignRequest) =>
 
 export const updateCampaign = (id: string, body: UpdateCampaignRequest) =>
   apiJson(campaignPath(id), UpdatedCampaign, { method: "PATCH", body });
+
+/** Disable all / enable all: sets `enabled` on every member (ADR 0012). */
+export const setCampaignLinksEnabled = (id: string, enabled: boolean) =>
+  apiJson(`${campaignPath(id)}/links`, UpdatedCampaignLinks, { method: "PATCH", body: { enabled } });
 
 /** Detaches every member; links are never deleted or disabled. */
 export const deleteCampaign = (id: string) => apiSend(campaignPath(id), { method: "DELETE" });

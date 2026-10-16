@@ -2,21 +2,26 @@
 // (ADR 0004).
 
 import {
+  campaignUtmKey,
   CreateLinkRequest,
   generateSlug,
   ListLinksQuery,
   UpdateLinkRequest,
+  type CampaignLinkUtmPatch,
+  type ErrorDetail,
   type LinkPage,
 } from "@furea/shared";
 import { Hono } from "hono";
 import { deleteCacheEntry } from "../core/cache.ts";
+import { campaignUtmKeys, getCampaign } from "../core/db/campaigns.ts";
 import { deleteLink, getLink, insertLink, listLinks, updateLink, type LinkRow } from "../core/db/links.ts";
+import { composeCampaignLink } from "./campaigns.ts";
 import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
 import { destinationFor } from "./destination.ts";
 import { apiError, notFound } from "./errors.ts";
-import { toLinkResource, toLinks } from "./link-resource.ts";
+import { toLinkResource, toLinks, utmOf } from "./link-resource.ts";
 import { adoptMismatch, planMembership, type MembershipChanges } from "./membership.ts";
 import { logScreening, screen } from "./screening.ts";
 import { requireCaller, requireWrite } from "./session.ts";
@@ -76,42 +81,59 @@ links.get("/:slug", requireCaller, async (c) => {
 // A merge-patch (ADR 0009). The cache entry is written even when nothing changed, so `PATCH {}` repairs it. A
 // destination is screened whenever it is present, even when its host is the link's current one (ADR 0013).
 links.patch("/:slug", requireWrite, jsonBody(updateLinkRequestFor), async (c) => {
-  const { destination, title, enabled, campaign, screening } = c.var.body;
+  const { destination, title, enabled, campaign, utm, screening } = c.var.body;
   const slug = c.req.param("slug");
   let membership: MembershipChanges = {};
-  if (destination !== undefined || campaign !== undefined) {
+  let recomposed: { destination: string; campaignUtmKey: string } | undefined;
+  if (destination !== undefined || campaign !== undefined || utm !== undefined) {
     const current = await getLink(c.env.DB, slug);
     if (current === null) return notFound();
     // No drift (ADR 0012): a campaign link's destination is always composed from the campaign. Detaching in the
     // same request frees it.
     const ownedAfter = campaign === undefined ? current.campaign_id !== null : campaign !== null;
+    const details: ErrorDetail[] = [];
     if (destination !== undefined && ownedAfter) {
-      return apiError(400, "validation_failed", "The request is invalid.", {
-        details: [
-          {
-            field: "destination",
-            code: "destination_campaign_owned",
-            message: "A campaign link's destination is composed from its campaign; detach the link to edit it.",
-          },
-        ],
+      details.push({
+        field: "destination",
+        code: "destination_campaign_owned",
+        message: "A campaign link's destination is composed from its campaign; detach the link to edit it.",
       });
     }
+    // Own UTM values belong to a link already in its campaign, staying there: not to one being adopted or detached.
+    const staysMember = current.campaign_id !== null && (campaign === undefined || campaign?.id === current.campaign_id);
+    if (utm !== undefined && !staysMember) {
+      details.push({
+        field: "utm",
+        code: "utm_requires_campaign",
+        message: "Only a campaign link has its own UTM values; edit a plain link's destination instead.",
+      });
+    }
+    if (details.length > 0) return apiError(400, "validation_failed", "The request is invalid.", { details });
     if (campaign !== undefined) {
       const planned = await planMembership(c.env.DB, current, campaign);
       if (planned instanceof Response) return planned;
       membership = planned;
     }
+    if (utm !== undefined && current.campaign_id !== null) {
+      const own = await recompose(c.env.DB, current, current.campaign_id, utm, new URL(c.req.url));
+      if (own instanceof Response) return own;
+      recomposed = own;
+    }
   }
+  // Only a destination given as such is screened: a recomposed one keeps the campaign's host (ADR 0009).
   const destinations = destination === undefined ? [] : [{ field: "destination", url: destination }];
   const screened = await screen(c.var.caller, destinations, screening);
   if (screened instanceof Response) return screened;
   let row: LinkRow | null;
   try {
-    row = await updateLink(c.env.DB, slug, { destination, title, enabled, ...membership });
+    row = await updateLink(c.env.DB, slug, { destination, title, enabled, ...membership, ...recomposed });
   } catch (err) {
-    // A concurrent write gave the campaign this UTM combination between the match and the update (ADR 0016).
-    if (membership.campaign && err instanceof Error && /UNIQUE/.test(err.message)) {
-      return adoptMismatch("utm_combination_taken");
+    if (err instanceof Error && /UNIQUE/.test(err.message)) {
+      // A concurrent write gave the campaign this UTM combination between the check and the update (ADR 0016).
+      if (membership.campaign) return adoptMismatch("utm_combination_taken");
+      if (recomposed !== undefined) {
+        return apiError(409, "utm_combination_taken", "The campaign already has this combination, compared ignoring case.");
+      }
     }
     throw err;
   }
@@ -127,3 +149,48 @@ links.delete("/:slug", requireWrite, async (c) => {
   await deleteCacheEntry(c.env.KV, slug);
   return existed ? c.body(null, 204) : notFound();
 });
+
+/**
+ * A campaign link's destination recomposed with its own UTM values merge-patched (ADR 0009, ADR 0014), and the
+ * combination key that goes with it; or the refusal: too long, or a combination another member holds.
+ */
+async function recompose(
+  db: D1Database,
+  current: LinkRow,
+  campaignId: string,
+  patch: CampaignLinkUtmPatch,
+  requestUrl: URL,
+): Promise<Response | { destination: string; campaignUtmKey: string }> {
+  const campaign = await getCampaign(db, campaignId);
+  if (campaign === null) throw new Error("a campaign link's campaign vanished");
+  const stored = utmOf(current.destination);
+  const own = {
+    source: patch.source ?? stored.source,
+    medium: patch.medium ?? stored.medium,
+    content: patch.content === undefined ? stored.content : patch.content,
+    term: patch.term === undefined ? stored.term : patch.term,
+  };
+  const composed = composeCampaignLink(campaign, own);
+  if (!destinationFor(requestUrl).safeParse(composed).success) {
+    return apiError(400, "validation_failed", "The request is invalid.", {
+      details: [
+        { field: "utm", code: "destination_invalid", message: "The composed destination would be longer than 2048 characters." },
+      ],
+    });
+  }
+  const key = campaignUtmKey(own);
+  const holder = (await campaignUtmKeys(db, campaign.id)).get(key);
+  if (holder !== undefined && holder !== current.slug) {
+    return apiError(409, "utm_combination_taken", `The campaign already has this combination as /${holder}, compared ignoring case.`, {
+      details: [
+        {
+          field: "utm",
+          code: "utm_combination_taken",
+          message: `The campaign already has this combination as /${holder}, compared ignoring case.`,
+          conflictsWith: { slug: holder },
+        },
+      ],
+    });
+  }
+  return { destination: composed, campaignUtmKey: key };
+}

@@ -27,8 +27,10 @@ import {
   SessionResponse,
   Settings,
   StatsQuery,
+  UpdateCampaignLinksRequest,
   UpdateCampaignRequest,
   UpdatedCampaign,
+  UpdatedCampaignLinks,
   UpdateLinkRequest,
   UpdateSettingsRequest,
 } from "@furea/shared";
@@ -190,7 +192,9 @@ const OPERATIONS: Operation[] = [
       "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the " +
       "redirect cache entry. A destination is screened like on creation. campaign: null detaches the link; " +
       "campaign: {id} adopts a plain link whose destination already matches the campaign (409 adopt_mismatch with " +
-      "the reason code, campaign_member, campaign_link_limit).",
+      "the reason code, campaign_member, campaign_link_limit). On a campaign link, utm merge-patches its own " +
+      "values and recomposes the destination, unscreened (409 utm_combination_taken); utm on a plain link is " +
+      "refused (utm_requires_campaign).",
     parameters: [SLUG_PARAMETER],
     body: "UpdateLinkRequest",
     success: { status: 200, description: "The edited link.", schema: "Link" },
@@ -237,12 +241,15 @@ const OPERATIONS: Operation[] = [
     method: "patch",
     path: "/campaigns/{id}",
     summary:
-      "Edit a campaign as a merge-patch: name. The aggregates are read-only. 409 campaign_name_taken when another " +
-      "campaign has the name, ignoring case.",
+      "Edit a campaign as a merge-patch: name, baseUrl, utmCampaign, utmId. A change to any of the last three " +
+      "rewrites every member's destination, disabled ones included, in one batch (rewrittenLinkCount), screened " +
+      "once on the base URL (422 destination_flagged); a rewrite that would push a member past 2048 characters " +
+      "writes nothing (400 validation_failed, one rewrite_too_long per slug). The aggregates are read-only. 409 " +
+      "campaign_name_taken when another campaign has the name, ignoring case.",
     parameters: [CAMPAIGN_ID_PARAMETER],
     body: "UpdateCampaignRequest",
     success: { status: 200, description: "The edited campaign.", schema: "UpdatedCampaign" },
-    errors: [...BODY_ERRORS, 401, 403, 404, 409],
+    errors: [...BODY_ERRORS, 401, 403, 404, 409, 422],
   },
   {
     method: "delete",
@@ -272,6 +279,15 @@ const OPERATIONS: Operation[] = [
     body: "BulkCreateCampaignLinksRequest",
     success: { status: 201, description: "The created links, in request order.", schema: "CampaignLinks" },
     errors: [...BODY_ERRORS, 401, 403, 404, 409, 422],
+  },
+  {
+    method: "patch",
+    path: "/campaigns/{id}/links",
+    summary: "Disable all / enable all: sets enabled on every link of the campaign; there is no campaign state.",
+    parameters: [CAMPAIGN_ID_PARAMETER],
+    body: "UpdateCampaignLinksRequest",
+    success: { status: 200, description: "How many links were set.", schema: "UpdatedCampaignLinks" },
+    errors: [...BODY_ERRORS, 401, 403, 404],
   },
   {
     method: "get",
@@ -382,6 +398,7 @@ export function buildOpenApiDocument(version: string): JsonSchema {
           CreateCampaignRequest,
           CreateLinkRequest,
           LoginRequest,
+          UpdateCampaignLinksRequest,
           UpdateCampaignRequest,
           UpdateLinkRequest,
           UpdateSettingsRequest,
@@ -404,6 +421,7 @@ export function buildOpenApiDocument(version: string): JsonSchema {
           SessionResponse,
           Settings,
           UpdatedCampaign,
+          UpdatedCampaignLinks,
         }),
       },
       responses: {

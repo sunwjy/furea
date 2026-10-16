@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { isCustomSlug, isReservedPath } from "../slug.ts";
+import { CampaignLinkUtmPatch } from "./utm-values.ts";
 
 export const DESTINATION_MAX_LENGTH = 2048;
 export const TITLE_MAX_LENGTH = 200;
@@ -106,6 +107,7 @@ export const UpdateLinkRequest = z.strictObject({
   enabled: z.boolean().optional().describe("false disables the link, true enables it again."),
   campaign: LinkMembership.optional(),
   slug: ImmutableSlug.optional(),
+  utm: CampaignLinkUtmPatch.optional(),
   screening: ScreeningOverride,
 });
 export type UpdateLinkRequest = Omit<z.input<typeof UpdateLinkRequest>, "slug">;

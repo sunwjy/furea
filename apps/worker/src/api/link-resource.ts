@@ -36,7 +36,8 @@ function toLink(row: LinkRow, requestUrl: string, names: ReadonlyMap<string, str
   };
 }
 
-function utmOf(destination: string): NonNullable<Link["utm"]> {
+/** A campaign link's own UTM values, read out of its destination. */
+export function utmOf(destination: string): NonNullable<Link["utm"]> {
   const { values } = parseUtm(destination);
   return {
     source: values.utm_source,

@@ -100,18 +100,69 @@ export async function renameCampaign(
   name: string,
   now = new Date(),
 ): Promise<CampaignRow | "taken" | null> {
-  const key = foldKey(name);
-  const holder = await db.prepare("SELECT id FROM campaigns WHERE name_key = ?").bind(key).first<string>("id");
-  if (holder !== null && holder !== id) return "taken";
-  try {
-    await db
-      .prepare("UPDATE campaigns SET name = ?, name_key = ?, updated_at = ? WHERE id = ?")
-      .bind(name, key, now.toISOString(), id)
-      .run();
-  } catch (err) {
-    // A concurrent rename took the name between the check and the update.
-    if (err instanceof Error && /UNIQUE/.test(err.message)) return "taken";
-    throw err;
+  return updateCampaign(db, id, { name }, [], now);
+}
+
+export interface CampaignChanges {
+  name?: string | undefined;
+  baseUrl?: string | undefined;
+  utmCampaign?: string | undefined;
+  /** `null` removes it. */
+  utmId?: string | null | undefined;
+}
+
+/** A member's destination as recomposed for the campaign's new shared values (ADR 0014). */
+export interface RewrittenDestination {
+  slug: string;
+  destination: string;
+}
+
+/**
+ * Applies the given fields and rewrites the given members' destinations in one D1 batch, which is one transaction
+ * (ADR 0012 *Rewrites*); `updated_at` moves on the campaign and on every rewritten link. Returns the campaign as
+ * stored, `"taken"` when another campaign holds the new name by fold key, `null` for an unknown id.
+ */
+export async function updateCampaign(
+  db: D1Database,
+  id: string,
+  changes: CampaignChanges,
+  rewritten: readonly RewrittenDestination[],
+  now = new Date(),
+): Promise<CampaignRow | "taken" | null> {
+  const sets: string[] = [];
+  const params: (string | null)[] = [];
+  if (changes.name !== undefined) {
+    const key = foldKey(changes.name);
+    const holder = await db.prepare("SELECT id FROM campaigns WHERE name_key = ?").bind(key).first<string>("id");
+    if (holder !== null && holder !== id) return "taken";
+    sets.push("name = ?", "name_key = ?");
+    params.push(changes.name, key);
+  }
+  if (changes.baseUrl !== undefined) {
+    sets.push("base_url = ?");
+    params.push(changes.baseUrl);
+  }
+  if (changes.utmCampaign !== undefined) {
+    sets.push("utm_campaign = ?");
+    params.push(changes.utmCampaign);
+  }
+  if (changes.utmId !== undefined) {
+    sets.push("utm_id = ?");
+    params.push(changes.utmId);
+  }
+  if (sets.length > 0 || rewritten.length > 0) {
+    const at = now.toISOString();
+    const rewrite = db.prepare("UPDATE links SET destination = ?, updated_at = ? WHERE slug = ? AND campaign_id = ?");
+    try {
+      await db.batch([
+        db.prepare(`UPDATE campaigns SET ${[...sets, "updated_at = ?"].join(", ")} WHERE id = ?`).bind(...params, at, id),
+        ...rewritten.map((link) => rewrite.bind(link.destination, at, link.slug, id)),
+      ]);
+    } catch (err) {
+      // A concurrent rename took the name between the check and the update.
+      if (err instanceof Error && /UNIQUE/.test(err.message)) return "taken";
+      throw err;
+    }
   }
   return getCampaign(db, id);
 }

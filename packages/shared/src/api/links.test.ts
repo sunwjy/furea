@@ -118,6 +118,21 @@ describe("UpdateLinkRequest", () => {
     ]);
   });
 
+  it("merge-patches a campaign link's own UTM values: trimmed, case kept, empty or null content/term for none", () => {
+    expect(UpdateLinkRequest.parse({ utm: { source: " Newsletter " } })).toEqual({ utm: { source: "Newsletter" } });
+    expect(UpdateLinkRequest.parse({ utm: { medium: "Email", content: "  ", term: null } })).toEqual({
+      utm: { medium: "Email", content: null, term: null },
+    });
+  });
+
+  it("refuses a null or empty source or medium, and unknown UTM fields", () => {
+    expect(codes(UpdateLinkRequest.safeParse({ utm: { source: null, medium: " ", campaign: "x" } }))).toEqual([
+      { path: "utm.source", code: "invalid_type" },
+      { path: "utm.medium", code: "too_small" },
+      { path: "utm", code: "unrecognized_keys" },
+    ]);
+  });
+
   it("refuses null for destination and enabled", () => {
     expect(UpdateLinkRequest.safeParse({ destination: null }).success).toBe(false);
     expect(UpdateLinkRequest.safeParse({ enabled: null }).success).toBe(false);

@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { CampaignLinkEditForm } from "@/components/campaign-link-edit";
 import { AnalyticsHint, BarSeries, ESTIMATE_LABEL, RangeTabs, TopList } from "@/components/analytics";
 import { EnableToggle, LinkBadges, SyncPendingNotice, useUpdateLink } from "@/components/link-status";
 import {
@@ -81,7 +82,11 @@ function LinkDetails({ link }: { link: LinkResource }) {
       </div>
       <SyncPendingNotice link={link} />
       {editing ? (
-        <EditForm link={link} onDone={() => setEditing(false)} />
+        link.campaign !== null ? (
+          <CampaignLinkEditForm link={link} onDone={() => setEditing(false)} />
+        ) : (
+          <EditForm link={link} onDone={() => setEditing(false)} />
+        )
       ) : (
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
@@ -259,7 +264,7 @@ function LinkAnalytics({ slug }: { slug: string }) {
   );
 }
 
-/** The editable fields' own schemas; the slug is never editable (ADR 0002). */
+/** A plain link's editable fields' own schemas; the slug is never editable (ADR 0002). */
 const EditLinkForm = z.object({ destination: Destination, title: Title });
 type EditLinkInput = z.input<typeof EditLinkForm>;
 type EditLinkValues = z.output<typeof EditLinkForm>;
@@ -314,40 +319,27 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
   return (
     <form onSubmit={onSubmit} noValidate>
       <FieldGroup>
-        {link.campaign !== null ? (
-          // No drift (ADR 0012): the campaign composes the destination, so it is shown, never edited, here.
-          <Field>
-            <FieldLabel>Destination</FieldLabel>
-            <p className="text-sm break-all">{link.destination}</p>
-            <FieldDescription>
-              Composed from the campaign {link.campaign.name}. Detach the link to edit its destination.
-            </FieldDescription>
-          </Field>
-        ) : (
-          <>
-            <Field data-invalid={errors.destination ? true : undefined}>
-              <FieldLabel htmlFor="destination">Destination</FieldLabel>
-              <Input
-                id="destination"
-                type="url"
-                inputMode="url"
-                autoFocus
-                aria-invalid={errors.destination ? true : undefined}
-                {...form.register("destination")}
-              />
-              <FieldError errors={[errors.destination]} />
-            </Field>
-            {refused !== null && refused.body.destination === destination && (
-              <ScreeningRefusal
-                host={refused.host}
-                action="Save anyway"
-                pending={update.isPending || isSubmitting}
-                onOverride={() => void send({ ...refused.body, screening: "skip" })}
-              />
-            )}
-            <UtmBuilder destination={destination} onCompose={composeDestination} />
-          </>
+        <Field data-invalid={errors.destination ? true : undefined}>
+          <FieldLabel htmlFor="destination">Destination</FieldLabel>
+          <Input
+            id="destination"
+            type="url"
+            inputMode="url"
+            autoFocus
+            aria-invalid={errors.destination ? true : undefined}
+            {...form.register("destination")}
+          />
+          <FieldError errors={[errors.destination]} />
+        </Field>
+        {refused !== null && refused.body.destination === destination && (
+          <ScreeningRefusal
+            host={refused.host}
+            action="Save anyway"
+            pending={update.isPending || isSubmitting}
+            onOverride={() => void send({ ...refused.body, screening: "skip" })}
+          />
         )}
+        <UtmBuilder destination={destination} onCompose={composeDestination} />
         <Field data-invalid={errors.title ? true : undefined}>
           <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
           <Input id="title" aria-invalid={errors.title ? true : undefined} {...form.register("title")} />

@@ -352,7 +352,7 @@
         }
       },
       "patch": {
-        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry. A destination is screened like on creation. campaign: null detaches the link; campaign: {id} adopts a plain link whose destination already matches the campaign (409 adopt_mismatch with the reason code, campaign_member, campaign_link_limit).",
+        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry. A destination is screened like on creation. campaign: null detaches the link; campaign: {id} adopts a plain link whose destination already matches the campaign (409 adopt_mismatch with the reason code, campaign_member, campaign_link_limit). On a campaign link, utm merge-patches its own values and recomposes the destination, unscreened (409 utm_combination_taken); utm on a plain link is refused (utm_requires_campaign).",
         "parameters": [
           {
             "name": "slug",
@@ -570,7 +570,7 @@
         }
       },
       "patch": {
-        "summary": "Edit a campaign as a merge-patch: name. The aggregates are read-only. 409 campaign_name_taken when another campaign has the name, ignoring case.",
+        "summary": "Edit a campaign as a merge-patch: name, baseUrl, utmCampaign, utmId. A change to any of the last three rewrites every member's destination, disabled ones included, in one batch (rewrittenLinkCount), screened once on the base URL (422 destination_flagged); a rewrite that would push a member past 2048 characters writes nothing (400 validation_failed, one rewrite_too_long per slug). The aggregates are read-only. 409 campaign_name_taken when another campaign has the name, ignoring case.",
         "parameters": [
           {
             "name": "id",
@@ -621,6 +621,9 @@
             "$ref": "#/components/responses/Error"
           },
           "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -740,6 +743,59 @@
             "$ref": "#/components/responses/Error"
           },
           "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Disable all / enable all: sets enabled on every link of the campaign; there is no campaign state.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCampaignLinksRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many links were set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatedCampaignLinks"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -1234,6 +1290,19 @@
         ],
         "additionalProperties": false
       },
+      "UpdateCampaignLinksRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "false disables every member link, true enables every one."
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
       "UpdateCampaignRequest": {
         "type": "object",
         "properties": {
@@ -1242,6 +1311,27 @@
             "minLength": 1,
             "maxLength": 100,
             "description": "Trimmed, 1 to 100 characters, unique across the instance ignoring case (campaign_name_taken)."
+          },
+          "baseUrl": {
+            "type": "string",
+            "description": "Where every link of the campaign lands before its UTM parameters are added: a destination without utm_* parameters (base_url_has_utm)."
+          },
+          "utmCampaign": {
+            "description": "The utm_campaign every link carries, trimmed, case kept.",
+            "type": "string",
+            "minLength": 1
+          },
+          "utmId": {
+            "description": "The utm_id every link carries; empty or null for none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
           },
           "linkCount": {
             "description": "Never accepted: linkCount is computed from the links (read_only_field)."
@@ -1299,6 +1389,37 @@
           },
           "slug": {
             "description": "Never accepted: a link's slug cannot be changed (slug_immutable)."
+          },
+          "utm": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "description": "utm_source, trimmed, case kept; never null.",
+                "type": "string",
+                "minLength": 1
+              },
+              "medium": {
+                "description": "utm_medium, trimmed, case kept; never null.",
+                "type": "string",
+                "minLength": 1
+              },
+              "content": {
+                "description": "utm_content; empty or null for none.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "term": {
+                "description": "utm_term; empty or null for none.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "description": "A campaign link's own UTM values, merge-patched; the destination is recomposed. Refused on a plain link (utm_requires_campaign)."
           },
           "screening": {
             "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
@@ -2253,6 +2374,19 @@
           "createdAt",
           "updatedAt",
           "rewrittenLinkCount"
+        ]
+      },
+      "UpdatedCampaignLinks": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "updated"
         ]
       }
     },

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { hasUtmKey } from "../utm.ts";
 import { CustomSlug, Destination, Link, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, ScreeningOverride, Title } from "./links.ts";
+import { OptionalUtmValue, RequiredUtmValue, UtmValue } from "./utm-values.ts";
 
 /** At most this many links per campaign (ADR 0012): `409 campaign_link_limit` beyond it. */
 export const CAMPAIGN_LINK_LIMIT = 50;
@@ -30,12 +31,6 @@ export const BaseUrl = Destination.refine((url) => !hasUtmKey(url), {
     "parameters (base_url_has_utm).",
 );
 
-/** A UTM value as entered: trimmed, case kept (ADR 0012). */
-const UtmValue = z.string().trim();
-const RequiredUtmValue = UtmValue.min(1, { message: "Required." });
-/** Optional: empty, whitespace-only and `null` all mean "none". */
-const OptionalUtmValue = UtmValue.transform((value) => (value === "" ? null : value)).nullable();
-
 /** `POST /campaigns`. */
 export const CreateCampaignRequest = z.strictObject({
   name: CampaignName,
@@ -55,9 +50,16 @@ const ReadOnly = (what: string) =>
     .refine(() => false, { message: `${what} is computed from the links and read-only.`, params: { code: "read_only_field" } })
     .describe(`Never accepted: ${what} is computed from the links (read_only_field).`);
 
-/** `PATCH /campaigns/:id`, a merge-patch. */
+/**
+ * `PATCH /campaigns/:id`, a merge-patch. A change to `baseUrl`, `utmCampaign` or `utmId` rewrites every member's
+ * destination (ADR 0012) and is screened once.
+ */
 export const UpdateCampaignRequest = z.strictObject({
   name: CampaignName.optional(),
+  baseUrl: BaseUrl.optional(),
+  utmCampaign: RequiredUtmValue.optional().describe("The utm_campaign every link carries, trimmed, case kept."),
+  utmId: OptionalUtmValue.optional().describe("The utm_id every link carries; empty or null for none."),
+  screening: ScreeningOverride,
   linkCount: ReadOnly("linkCount").optional(),
   enabledLinkCount: ReadOnly("enabledLinkCount").optional(),
   clickCount: ReadOnly("clickCount").optional(),
@@ -121,6 +123,16 @@ export type Campaign = z.infer<typeof Campaign>;
 /** The answer to `PATCH /campaigns/:id`: how many member destinations the edit rewrote. */
 export const UpdatedCampaign = Campaign.extend({ rewrittenLinkCount: z.number().int() });
 export type UpdatedCampaign = z.infer<typeof UpdatedCampaign>;
+
+/** `PATCH /campaigns/:id/links`: disable all / enable all, a merge-patch applied to every member (ADR 0012). */
+export const UpdateCampaignLinksRequest = z.strictObject({
+  enabled: z.boolean().describe("false disables every member link, true enables every one."),
+});
+export type UpdateCampaignLinksRequest = z.input<typeof UpdateCampaignLinksRequest>;
+
+/** The answer to `PATCH /campaigns/:id/links`: how many members changed. */
+export const UpdatedCampaignLinks = z.object({ updated: z.number().int() });
+export type UpdatedCampaignLinks = z.infer<typeof UpdatedCampaignLinks>;
 
 export const CampaignPage = z.object({
   items: z.array(Campaign),

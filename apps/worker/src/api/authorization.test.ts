@@ -75,6 +75,7 @@ const ENDPOINTS: Endpoint[] = [
     body: { items: [{ utm: { source: "authz", medium: "m" } }] },
     expect: WRITE,
   },
+  { method: "PATCH", path: `/campaigns/${CAMPAIGN}/links`, body: { enabled: true }, expect: WRITE },
   { method: "DELETE", path: `/campaigns/${CAMPAIGN}`, expect: WRITE },
   // Logging out and changing the password end sessions, so they run last and with their own session.
 ];

@@ -110,6 +110,8 @@ export interface LinkChanges {
    * always set and cleared together (ADR 0016).
    */
   campaign?: { id: string; utmKey: string } | null | undefined;
+  /** A campaign link's new `campaign_utm_key`, set together with its recomposed destination (ADR 0016). */
+  campaignUtmKey?: string | undefined;
 }
 
 /**
@@ -140,11 +142,29 @@ export async function updateLink(
     sets.push("campaign_id = ?", "campaign_utm_key = ?");
     params.push(changes.campaign?.id ?? null, changes.campaign?.utmKey ?? null);
   }
+  if (changes.campaignUtmKey !== undefined) {
+    sets.push("campaign_utm_key = ?");
+    params.push(changes.campaignUtmKey);
+  }
   if (sets.length === 0) return getLink(db, slug);
   return db
     .prepare(`UPDATE links SET ${sets.join(", ")}, updated_at = ? WHERE slug = ? RETURNING ${COLUMNS}`)
     .bind(...params, now.toISOString(), slug)
     .first<LinkRow>();
+}
+
+/** Sets `enabled` on every member of the campaign (ADR 0012 *Bulk operations*); returns the rows as stored. */
+export async function setCampaignLinksEnabled(
+  db: D1Database,
+  campaignId: string,
+  enabled: boolean,
+  now = new Date(),
+): Promise<LinkRow[]> {
+  const { results } = await db
+    .prepare(`UPDATE links SET enabled = ?, updated_at = ? WHERE campaign_id = ? RETURNING ${COLUMNS}`)
+    .bind(enabled ? 1 : 0, now.toISOString(), campaignId)
+    .all<LinkRow>();
+  return results;
 }
 
 /** The link's latest change has not reached the redirect cache (ADR 0004). */

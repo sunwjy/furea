@@ -4,7 +4,7 @@
 import { CreatedApiKey, Settings } from "@furea/shared";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { certsFetch, createTestTeam, type TestTeam } from "../core/access.fixture.ts";
+import { certsFetch, createTestTeam, type TestTeam } from "../../test/access.ts";
 import { sha256Hex } from "../core/crypto.ts";
 import { findSession } from "../core/db/sessions.ts";
 import { getSetting } from "../core/db/settings.ts";

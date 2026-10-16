@@ -32,6 +32,8 @@ In turbo, `test` does not depend on `^build` except in `packages/cli`, whose tes
 ### File layout
 
 - Unit tests are **colocated**: `foo.ts` next to `foo.test.ts`. The published tarball only carries `dist`, `bin` and `migrations` (ADR 0007), so test files never ship.
+- Worker tests that drive `createWorker` with injected dependencies (the SQL API `fetch`, a fault-injecting KV) and span several route modules sit in `apps/worker/src/` next to `index.ts`: `api/` may not import the entry point (ADR 0007's lint rule). They are `stats.test.ts` (the three stats routes) and `campaign-edits.test.ts` (campaign rewrites through the repair loop).
+- Test-only helpers shared by several test files live in `apps/worker/test/` (`doh.ts`, the canned resolver; `access.ts`, a stand-in Access team), never in `src/`.
 - Playwright lives in `apps/admin/e2e/`.
 - CLI fixtures live in `packages/cli/test/fixtures/`.
 - Compat and Integration scripts live in the repository root `scripts/`, sharing one request set in `scripts/lib/smoke.mjs`.

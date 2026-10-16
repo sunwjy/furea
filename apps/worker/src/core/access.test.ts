@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { certsFetch, createTestTeam, type TestTeam } from "./access.fixture.ts";
+import { certsFetch, createTestTeam, type TestTeam } from "../../test/access.ts";
 import { createAccessVerifier } from "./access.ts";
 
 let team: TestTeam;

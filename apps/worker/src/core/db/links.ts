@@ -26,6 +26,20 @@ export async function getLink(db: D1Database, slug: string): Promise<LinkRow | n
   return db.prepare(`SELECT ${COLUMNS} FROM links WHERE slug = ?`).bind(slug).first<LinkRow>();
 }
 
+export async function countLinks(db: D1Database): Promise<number> {
+  return (await db.prepare("SELECT count(*) AS n FROM links").first<number>("n")) ?? 0;
+}
+
+/** `created_at` of each of the given slugs that names an existing link. */
+export async function createdAtOf(db: D1Database, slugs: string[]): Promise<Map<string, string>> {
+  if (slugs.length === 0) return new Map();
+  const { results } = await db
+    .prepare("SELECT slug, created_at FROM links WHERE slug IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(slugs))
+    .all<{ slug: string; created_at: string }>();
+  return new Map(results.map((row) => [row.slug, row.created_at]));
+}
+
 /** Adds one click to the link's lifetime total (ADR 0005). An unknown slug changes nothing. */
 export async function incrementClickCount(db: D1Database, slug: string): Promise<void> {
   await db.prepare("UPDATE links SET click_count = click_count + 1 WHERE slug = ?").bind(slug).run();

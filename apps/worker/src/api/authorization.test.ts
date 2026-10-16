@@ -48,6 +48,9 @@ const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/auth/session", expect: ANY_CALLER },
   { method: "GET", path: "/links", expect: ANY_CALLER },
   { method: "GET", path: `/links/${SLUG}`, expect: ANY_CALLER },
+  // No analytics token in the test instance: a caller allowed to read is answered 503, past the check.
+  { method: "GET", path: `/links/${SLUG}/stats`, expect: ANY_CALLER },
+  { method: "GET", path: "/stats", expect: ANY_CALLER },
   { method: "POST", path: "/links", body: { destination: "https://example.com/authz" }, expect: WRITE },
   { method: "PATCH", path: `/links/${SLUG}`, body: {}, expect: WRITE },
   { method: "DELETE", path: `/links/${SLUG}`, expect: WRITE },
@@ -83,6 +86,7 @@ describe("who may call what", () => {
         if (expected === "ok") {
           // The DELETE of an unknown key id is the session's 404: past the authorization check.
           if (endpoint.path === "/api-keys/doesNotExist") expect(res.status).toBe(404);
+          else if (endpoint.path.endsWith("/stats")) expect(res.status).toBe(503);
           else expect(res.ok, `status ${res.status}`).toBe(true);
           return;
         }

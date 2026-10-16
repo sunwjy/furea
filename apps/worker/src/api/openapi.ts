@@ -9,12 +9,15 @@ import {
   CreateLinkRequest,
   ErrorDetail,
   ErrorEnvelope,
+  InstanceStats,
   Link,
   LinkPage,
+  LinkStats,
   ListLinksQuery,
   LoginMethodResponse,
   LoginRequest,
   SessionResponse,
+  StatsQuery,
   UpdateLinkRequest,
 } from "@furea/shared";
 import { z } from "zod";
@@ -186,6 +189,28 @@ const OPERATIONS: Operation[] = [
   },
   {
     method: "get",
+    path: "/links/{slug}/stats",
+    summary:
+      "A link's click breakdowns for the range: series (hourly for 24h, daily otherwise, zero-filled), top 10 " +
+      "countries, top 10 referrer hosts and device classes. Last 90 days, estimated. 503 analytics_unavailable " +
+      "when breakdowns are not configured, naming what is missing.",
+    parameters: [SLUG_PARAMETER, ...queryParameters(StatsQuery)],
+    success: { status: 200, description: "The link's breakdowns.", schema: "LinkStats" },
+    errors: [400, 401, 404, 503],
+  },
+  {
+    method: "get",
+    path: "/stats",
+    summary:
+      "The instance overview: clicks today, in the last 7 and 30 days, the top 10 links for the range and a " +
+      "series per link with a click in the range. Last 90 days, estimated. 503 analytics_unavailable when " +
+      "breakdowns are not configured.",
+    parameters: queryParameters(StatsQuery),
+    success: { status: 200, description: "The overview.", schema: "InstanceStats" },
+    errors: [400, 401, 503],
+  },
+  {
+    method: "get",
     path: "/openapi.json",
     summary: "This document.",
     public: true,
@@ -231,8 +256,10 @@ export function buildOpenApiDocument(version: string): JsonSchema {
           CreatedApiKey,
           ErrorDetail,
           ErrorEnvelope,
+          InstanceStats,
           Link,
           LinkPage,
+          LinkStats,
           LoginMethodResponse,
           SessionResponse,
         }),

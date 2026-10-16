@@ -19,7 +19,8 @@ export function buildManifest(): WorkerManifest {
         { name: "LOGIN_IP_LIMITER", namespace_id: "730016001", simple: { limit: 5, period: 60 } },
         { name: "LOGIN_GLOBAL_LIMITER", namespace_id: "730016002", simple: { limit: 30, period: 60 } },
       ],
-      plain_text: ["FUREA_VERSION"],
+      // FUREA_ACCOUNT_ID: the account the Analytics Engine SQL API is read for (ADR 0005), next to ANALYTICS_TOKEN.
+      plain_text: ["FUREA_VERSION", "FUREA_ACCOUNT_ID"],
       optional_secrets: ["ANALYTICS_TOKEN"],
     },
   };

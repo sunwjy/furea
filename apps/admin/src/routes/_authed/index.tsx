@@ -1,5 +1,5 @@
-import type { Link as LinkResource } from "@furea/shared";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { InstanceStats, Link as LinkResource, SeriesPoint } from "@furea/shared";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Copy, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -15,11 +15,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { AnalyticsHint, ESTIMATE_LABEL, Sparkline, Tiles } from "@/components/analytics";
 import { EnableToggle, LinkBadges } from "@/components/link-status";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { deleteLink, LINKS_KEY, linkFeedQuery } from "@/lib/links";
+import { analyticsMissing, instanceStatsQuery } from "@/lib/stats";
 
 const FeedSearch = z.object({
   q: z.string().optional().catch(undefined),
@@ -37,6 +39,9 @@ function LinksPage() {
   const { q = "" } = Route.useSearch();
   const feed = useInfiniteQuery(linkFeedQuery(q));
   const links = feed.data?.pages.flatMap((page) => page.items) ?? [];
+  // The feed's sparklines are always the last 7 days (ADR 0005).
+  const overview = useQuery(instanceStatsQuery("7d"));
+  const missing = overview.isError ? analyticsMissing(overview.error) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -47,6 +52,8 @@ function LinksPage() {
           New link
         </Link>
       </div>
+      {overview.data ? <OverviewTiles stats={overview.data} /> : null}
+      {missing ? <AnalyticsHint missing={missing} /> : null}
       <SearchBox q={q} />
       {feed.isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -58,7 +65,7 @@ function LinksPage() {
         <ul aria-label="Links" className="flex flex-col gap-3">
           {links.map((link) => (
             <li key={link.slug}>
-              <LinkCard link={link} />
+              <LinkCard link={link} series={overview.data ? (overview.data.seriesBySlug[link.slug] ?? ZERO_WEEK) : null} />
             </li>
           ))}
         </ul>
@@ -69,6 +76,22 @@ function LinksPage() {
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/** A link without a click this week still gets its flat sparkline. */
+const ZERO_WEEK: SeriesPoint[] = Array.from({ length: 7 }, (_, i) => ({ start: String(i), clicks: 0 }));
+
+function OverviewTiles({ stats }: { stats: InstanceStats }) {
+  return (
+    <Tiles
+      tiles={[
+        { label: "Today", value: stats.today, hint: ESTIMATE_LABEL },
+        { label: "7 days", value: stats.last7d, hint: ESTIMATE_LABEL },
+        { label: "30 days", value: stats.last30d, hint: ESTIMATE_LABEL },
+        { label: "Links", value: stats.linkCount },
+      ]}
+    />
   );
 }
 
@@ -100,7 +123,7 @@ function SearchBox({ q }: { q: string }) {
   );
 }
 
-function LinkCard({ link }: { link: LinkResource }) {
+function LinkCard({ link, series }: { link: LinkResource; series: SeriesPoint[] | null }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const remove = useMutation({
@@ -134,6 +157,7 @@ function LinkCard({ link }: { link: LinkResource }) {
             <span className="text-sm text-muted-foreground" title="Lifetime total">
               {link.clickCount === 1 ? "1 click" : `${link.clickCount.toLocaleString()} clicks`}
             </span>
+            {series ? <Sparkline points={series} /> : null}
           </div>
           <Link
             to="/links/$slug"

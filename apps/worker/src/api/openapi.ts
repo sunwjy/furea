@@ -188,11 +188,13 @@ const OPERATIONS: Operation[] = [
     path: "/links/{slug}",
     summary:
       "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the " +
-      "redirect cache entry. A destination is screened like on creation.",
+      "redirect cache entry. A destination is screened like on creation. campaign: null detaches the link; " +
+      "campaign: {id} adopts a plain link whose destination already matches the campaign (409 adopt_mismatch with " +
+      "the reason code, campaign_member, campaign_link_limit).",
     parameters: [SLUG_PARAMETER],
     body: "UpdateLinkRequest",
     success: { status: 200, description: "The edited link.", schema: "Link" },
-    errors: [...BODY_ERRORS, 401, 403, 404, 422],
+    errors: [...BODY_ERRORS, 401, 403, 404, 409, 422],
   },
   {
     method: "delete",

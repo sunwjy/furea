@@ -105,6 +105,11 @@ export interface LinkChanges {
   /** `null` clears the title. */
   title?: string | null | undefined;
   enabled?: boolean | undefined;
+  /**
+   * `null` detaches; a campaign id with the link's `campaignUtmKey` adopts. `campaign_id` and `campaign_utm_key` are
+   * always set and cleared together (ADR 0016).
+   */
+  campaign?: { id: string; utmKey: string } | null | undefined;
 }
 
 /**
@@ -130,6 +135,10 @@ export async function updateLink(
   if (changes.enabled !== undefined) {
     sets.push("enabled = ?");
     params.push(changes.enabled ? 1 : 0);
+  }
+  if (changes.campaign !== undefined) {
+    sets.push("campaign_id = ?", "campaign_utm_key = ?");
+    params.push(changes.campaign?.id ?? null, changes.campaign?.utmKey ?? null);
   }
   if (sets.length === 0) return getLink(db, slug);
   return db

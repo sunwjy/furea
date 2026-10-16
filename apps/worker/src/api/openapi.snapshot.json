@@ -352,7 +352,7 @@
         }
       },
       "patch": {
-        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry. A destination is screened like on creation.",
+        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry. A destination is screened like on creation. campaign: null detaches the link; campaign: {id} adopts a plain link whose destination already matches the campaign (409 adopt_mismatch with the reason code, campaign_member, campaign_link_limit).",
         "parameters": [
           {
             "name": "slug",
@@ -394,6 +394,9 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "413": {
@@ -1272,6 +1275,27 @@
           "enabled": {
             "description": "false disables the link, true enables it again.",
             "type": "boolean"
+          },
+          "campaign": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null detaches the link from its campaign, keeping its destination. {id} adopts a plain link into the campaign when its destination already matches it (ignoring UTM order and encoding), rewriting it to the canonical form."
           },
           "slug": {
             "description": "Never accepted: a link's slug cannot be changed (slug_immutable)."

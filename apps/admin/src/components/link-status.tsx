@@ -3,27 +3,46 @@
 
 import type { Link as LinkResource, UpdateLinkRequest } from "@furea/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Power, PowerOff, RefreshCw } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Flag, Power, PowerOff, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CAMPAIGNS_KEY } from "@/lib/campaigns";
 import { isLinkListQuery, LINKS_KEY, linkQuery, updateLink } from "@/lib/links";
 
-/** A `PATCH` on one link; the link page's query takes the answer as is, every other link query refetches. */
+/**
+ * A `PATCH` on one link; the link page's query takes the answer as is, every other link query refetches, and so do
+ * the campaigns', whose aggregates and member lists are computed from the links.
+ */
 export function useUpdateLink(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: UpdateLinkRequest) => updateLink(slug, body),
     onSuccess: async (link) => {
       queryClient.setQueryData(linkQuery(slug).queryKey, link);
-      await queryClient.invalidateQueries({ queryKey: LINKS_KEY, predicate: isLinkListQuery });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: LINKS_KEY, predicate: isLinkListQuery }),
+        queryClient.invalidateQueries({ queryKey: CAMPAIGNS_KEY }),
+      ]);
     },
   });
 }
 
-export function LinkBadges({ link }: { link: LinkResource }) {
+/** The link's state; the campaign badge links to its campaign and is left out on the campaign's own page. */
+export function LinkBadges({ link, showCampaign = true }: { link: LinkResource; showCampaign?: boolean }) {
   return (
     <>
+      {link.campaign === null || !showCampaign ? null : (
+        <Badge
+          variant="outline"
+          title="Campaign"
+          render={<Link to="/campaigns/$id" params={{ id: link.campaign.id }} />}
+        >
+          <Flag data-icon="inline-start" />
+          {link.campaign.name}
+        </Badge>
+      )}
       {link.enabled ? null : <Badge variant="secondary">Disabled</Badge>}
       {link.cacheSynced ? null : <Badge variant="outline">Sync pending</Badge>}
     </>

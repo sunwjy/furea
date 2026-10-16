@@ -3,7 +3,7 @@
 
 import { CampaignStats, campaignUtmKey, InstanceStats, LinkStats } from "@furea/shared";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { env } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "./core/env.ts";
 import { insertCampaign } from "./core/db/campaigns.ts";
@@ -189,7 +189,7 @@ describe("GET /api/v1/stats", () => {
     const res = await get("/stats?range=7d&tz=Asia/Seoul", { fetch: api.fetch });
 
     expect(res.status).toBe(200);
-    const week = (values: Record<number, number>) => SEOUL_WEEK.map((start, i) => ({ start, clicks: values[i] ?? 0 }));
+  const week = (values: Record<number, number>) => SEOUL_WEEK.map((start, i) => ({ start, clicks: values[i] ?? 0 }));
     expect(InstanceStats.parse(await res.json())).toEqual({
       range: "7d",
       tz: "Asia/Seoul",
@@ -284,6 +284,15 @@ describe("GET /api/v1/campaigns/:id/stats", () => {
     loose: [{ bucket: "2026-10-11 00:00:00", clicks: 5, country: "KR", host: "direct", deviceClass: "mobile" }],
   };
 
+  const patchLink = (slug: string, body: unknown) =>
+    exports.default.fetch(
+      new Request(`${ORIGIN}/api/v1/links/${slug}`, {
+        method: "PATCH",
+        headers: { origin: ORIGIN, cookie, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+
   const week = (values: Record<number, number>) => SEOUL_WEEK.map((start, i) => ({ start, clicks: values[i] ?? 0 }));
   const member = (slug: string, source: string, created: string) => ({
     slug,
@@ -308,7 +317,11 @@ describe("GET /api/v1/campaigns/:id/stats", () => {
       member("spring-fb", "facebook", "2026-10-12T00:00:00.000Z"),
       member("spring-x", "x", "2026-10-13T00:00:00.000Z"),
     ]);
-    await insertLink(env.DB, { slug: "loose", destination: "https://example.com/spring?utm_source=news", now: new Date("2026-09-01T00:00:00Z") });
+    await insertLink(env.DB, {
+      slug: "loose",
+      destination: "https://example.com/spring?utm_source=news&utm_medium=social&utm_campaign=spring",
+      now: new Date("2026-09-01T00:00:00Z"),
+    });
   });
 
   it("returns the combined series and top lists, and every current member under bySlug, zero-filled", async () => {
@@ -335,11 +348,9 @@ describe("GET /api/v1/campaigns/:id/stats", () => {
   });
 
   it("brings an adopted link's earlier clicks in and takes a detached link's out, by current membership", async () => {
-    // Adopt `loose` and detach `spring-ig` the way the campaign-membership writes leave the rows.
-    await env.DB.prepare("UPDATE links SET campaign_id = ?, campaign_utm_key = ? WHERE slug = 'loose'")
-      .bind(CAMPAIGN, campaignUtmKey({ source: "news", medium: "social" }))
-      .run();
-    await env.DB.exec("UPDATE links SET campaign_id = NULL, campaign_utm_key = NULL WHERE slug = 'spring-ig'");
+    // Adopt `loose` and detach `spring-ig` through PATCH /links/:slug.
+    expect((await patchLink("loose", { campaign: { id: CAMPAIGN } })).status).toBe(200);
+    expect((await patchLink("spring-ig", { campaign: null })).status).toBe(200);
 
     const body = CampaignStats.parse(
       await (await get(`/campaigns/${CAMPAIGN}/stats?range=7d&tz=Asia/Seoul`, { fetch: clickStore(STORE).fetch })).json(),

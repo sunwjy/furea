@@ -362,7 +362,7 @@ function LinkRows({
                   <Link to="/links/$slug" params={{ slug: link.slug }} className="font-medium hover:underline">
                     /{link.slug}
                   </Link>
-                  <LinkBadges link={link} />
+                  <LinkBadges link={link} showCampaign={false} />
                 </div>
               </td>
               <td className="px-3 py-2">{link.utm?.source}</td>

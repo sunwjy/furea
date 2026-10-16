@@ -286,7 +286,33 @@ test("10. create a campaign, add two links in the row editor, and land on a comp
   await expect(row.getByRole("cell")).toHaveText(["E2E Spring", "E2E Spring", "2", "2"]);
 });
 
-test("11. open the campaign page without an analytics token: lifetime total and comparison, folded by medium", async () => {
+test("11. see the campaign badge, have an adopt refused, detach a campaign link and adopt it back", async () => {
+  // Feed cards carry the campaign badge, which links to the campaign.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Links" }).click();
+  await expect(page.getByRole("link", { name: "E2E Spring" })).toHaveCount(2);
+
+  // A plain link whose destination is not the campaign's: the refusal names the reason.
+  await page.goto(`/admin/links/${SLUG}`);
+  await page.getByLabel("Add to campaign").selectOption({ label: "E2E Spring" });
+  await expect(page.getByRole("alert")).toContainText(`Cannot add /${SLUG} to E2E Spring:`);
+  await expect(page.getByRole("alert")).toContainText("base URL");
+
+  // Detach keeps the destination; the link page then offers "Add to campaign…" instead.
+  await page.goto("/admin/links/e2e-spring-news");
+  await expect(page.getByText("In the campaign E2E Spring", { exact: false })).toBeVisible();
+  const destination = await page.getByRole("definition").first().textContent();
+  await page.getByRole("button", { name: "Detach" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Detach" }).click();
+  await expect(page.getByText("Detached /e2e-spring-news.")).toBeVisible();
+  await expect(page.getByRole("definition").first()).toHaveText(destination ?? "");
+
+  // Its destination still matches the campaign, so it can join it again.
+  await page.getByLabel("Add to campaign").selectOption({ label: "E2E Spring" });
+  await expect(page.getByText("Added /e2e-spring-news to E2E Spring.")).toBeVisible();
+  await expect(page.getByText("In the campaign E2E Spring", { exact: false })).toBeVisible();
+});
+
+test("12. open the campaign page without an analytics token: lifetime total and comparison, folded by medium", async () => {
   const res = await page.request.get("/api/v1/campaigns?q=E2E%20Spring");
   const id = ((await res.json()) as { items: { id: string }[] }).items[0]?.id ?? "";
   const stats = await page.request.get(`/api/v1/campaigns/${id}/stats?range=7d&tz=Asia/Seoul`);

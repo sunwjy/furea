@@ -85,6 +85,18 @@ const ImmutableSlug = z
   .describe("Never accepted: a link's slug cannot be changed (slug_immutable).");
 
 /**
+ * Membership (ADR 0009 *Membership*): `null` detaches, `{id}` adopts a plain link whose destination already matches
+ * the campaign (`409 adopt_mismatch`). A link of another campaign is detached first (`409 campaign_member`).
+ */
+export const LinkMembership = z
+  .strictObject({ id: z.string().min(1) })
+  .nullable()
+  .describe(
+    "null detaches the link from its campaign, keeping its destination. {id} adopts a plain link into the campaign " +
+      "when its destination already matches it (ignoring UTM order and encoding), rewriting it to the canonical form.",
+  );
+
+/**
  * `PATCH /links/:slug`, a merge-patch (ADR 0009): only the fields present change, `"title": null` clears the title,
  * and an empty `{}` still rewrites the cache entry.
  */
@@ -92,6 +104,7 @@ export const UpdateLinkRequest = z.strictObject({
   destination: Destination.optional(),
   title: Title.optional(),
   enabled: z.boolean().optional().describe("false disables the link, true enables it again."),
+  campaign: LinkMembership.optional(),
   slug: ImmutableSlug.optional(),
   screening: ScreeningOverride,
 });

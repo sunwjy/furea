@@ -223,7 +223,7 @@
     },
     "/links": {
       "post": {
-        "summary": "Create a link, with a custom slug or a generated one.",
+        "summary": "Create a link, with a custom slug or a generated one. The destination's host is screened (422 destination_flagged); a session may send screening: \"skip\" to save it anyway.",
         "requestBody": {
           "required": true,
           "content": {
@@ -261,6 +261,9 @@
             "$ref": "#/components/responses/Error"
           },
           "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -349,7 +352,7 @@
         }
       },
       "patch": {
-        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry.",
+        "summary": "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the redirect cache entry. A destination is screened like on creation.",
         "parameters": [
           {
             "name": "slug",
@@ -398,6 +401,9 @@
           },
           "415": {
             "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
           }
         }
       },
@@ -429,6 +435,214 @@
         }
       }
     },
+    "/settings": {
+      "get": {
+        "summary": "The instance settings: the root destination, Access mode and read-only instance facts.",
+        "responses": {
+          "200": {
+            "description": "The settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is screened like a link's destination.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The settings after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/password": {
+      "post": {
+        "summary": "Change the operator password after re-entering the current one; ends every session. Session only.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Changed; every session is ended and this one's cookie cleared."
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/links/{slug}/stats": {
+      "get": {
+        "summary": "A link's click breakdowns for the range: series (hourly for 24h, daily otherwise, zero-filled), top 10 countries, top 10 referrer hosts and device classes. Last 90 days, estimated. 503 analytics_unavailable when breakdowns are not configured, naming what is missing.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "24h (hourly buckets), 7d, 30d or 90d (daily buckets).",
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "The IANA time zone that day and hour boundaries follow, usually the browser's.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link's breakdowns.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "summary": "The instance overview: clicks today, in the last 7 and 30 days, the top 10 links for the range and a series per link with a click in the range. Last 90 days, estimated. 503 analytics_unavailable when breakdowns are not configured.",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "24h (hourly buckets), 7d, 30d or 90d (daily buckets).",
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "The IANA time zone that day and hour boundaries follow, usually the browser's.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The overview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "summary": "This document.",
@@ -455,6 +669,27 @@
       }
     },
     "schemas": {
+      "ChangePasswordRequest": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 256,
+            "description": "12 to 256 characters, no complexity rules."
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "additionalProperties": false
+      },
       "CreateApiKeyRequest": {
         "type": "object",
         "properties": {
@@ -494,6 +729,11 @@
               "string",
               "null"
             ]
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
           }
         },
         "required": [
@@ -535,6 +775,43 @@
           },
           "slug": {
             "description": "Never accepted: a link's slug cannot be changed (slug_immutable)."
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "rootDestination": {
+            "description": "Where the bare hostname redirects (302, not a click); null unsets it and / answers 404.",
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "An absolute http or https URL, at most 2048 characters of printable ASCII (percent-encoded), not pointing at this instance."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "analyticsConfigured": {
+            "description": "Never accepted: analyticsConfigured is read-only (read_only_field)."
+          },
+          "analyticsMissing": {
+            "description": "Never accepted: analyticsMissing is read-only (read_only_field)."
+          },
+          "version": {
+            "description": "Never accepted: version is read-only (read_only_field)."
+          },
+          "screening": {
+            "description": "\"skip\" saves a destination screening flagged (destination_flagged); from a session only, never stored.",
+            "type": "string",
+            "const": "skip"
           }
         },
         "additionalProperties": false
@@ -679,6 +956,92 @@
           "error"
         ]
       },
+      "InstanceStats": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d"
+            ]
+          },
+          "tz": {
+            "type": "string"
+          },
+          "today": {
+            "type": "number"
+          },
+          "last7d": {
+            "type": "number"
+          },
+          "last30d": {
+            "type": "number"
+          },
+          "linkCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "topLinks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "slug": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "slug",
+                "clicks"
+              ]
+            }
+          },
+          "seriesBySlug": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "clicks": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "start",
+                  "clicks"
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "range",
+          "tz",
+          "today",
+          "last7d",
+          "last30d",
+          "linkCount",
+          "topLinks",
+          "seriesBySlug"
+        ],
+        "description": "Last 90 days, estimated from Analytics Engine with sum(_sample_interval)."
+      },
       "Link": {
         "type": "object",
         "properties": {
@@ -812,6 +1175,106 @@
           "nextCursor"
         ]
       },
+      "LinkStats": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d"
+            ]
+          },
+          "tz": {
+            "type": "string"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "start",
+                "clicks"
+              ]
+            }
+          },
+          "countries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "country": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "country",
+                "clicks"
+              ]
+            }
+          },
+          "referrerHosts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "host",
+                "clicks"
+              ]
+            }
+          },
+          "deviceClasses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "deviceClass": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "deviceClass",
+                "clicks"
+              ]
+            }
+          }
+        },
+        "required": [
+          "range",
+          "tz",
+          "series",
+          "countries",
+          "referrerHosts",
+          "deviceClasses"
+        ],
+        "description": "Last 90 days, estimated from Analytics Engine with sum(_sample_interval)."
+      },
       "LoginMethodResponse": {
         "type": "object",
         "properties": {
@@ -872,6 +1335,62 @@
           "kind",
           "scope",
           "apiKey"
+        ]
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "rootDestination": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "access": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "teamDomain": {
+                    "type": "string"
+                  },
+                  "aud": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "teamDomain",
+                  "aud"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "analyticsConfigured": {
+            "type": "boolean"
+          },
+          "analyticsMissing": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "binding",
+                "token"
+              ]
+            }
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rootDestination",
+          "access",
+          "analyticsConfigured",
+          "analyticsMissing",
+          "version"
         ]
       }
     },

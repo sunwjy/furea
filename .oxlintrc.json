@@ -95,7 +95,8 @@
                   "../*",
                   "../**",
                   "!../core",
-                  "!../core/**"
+                  "!../core/**",
+                  "!../../test/**"
                 ],
                 "message": "api/ imports core/ only, never redirect/ or the entry point (ADR 0001, ADR 0007)."
               }

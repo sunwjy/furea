@@ -33,6 +33,11 @@ export async function deleteSession(db: D1Database, idHash: string): Promise<voi
   await db.prepare("DELETE FROM sessions WHERE id_hash = ?").bind(idHash).run();
 }
 
+/** "Log out everywhere": what a password change does (ADR 0003). */
+export async function deleteAllSessions(db: D1Database): Promise<void> {
+  await db.prepare("DELETE FROM sessions").run();
+}
+
 export async function purgeExpiredSessions(db: D1Database, now: Date): Promise<void> {
   await db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now.toISOString()).run();
 }

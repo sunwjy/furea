@@ -4,18 +4,24 @@
 import {
   ApiKey,
   ApiKeyList,
+  ChangePasswordRequest,
   CreateApiKeyRequest,
   CreatedApiKey,
   CreateLinkRequest,
   ErrorDetail,
   ErrorEnvelope,
+  InstanceStats,
   Link,
   LinkPage,
+  LinkStats,
   ListLinksQuery,
   LoginMethodResponse,
   LoginRequest,
   SessionResponse,
+  Settings,
+  StatsQuery,
   UpdateLinkRequest,
+  UpdateSettingsRequest,
 } from "@furea/shared";
 import { z } from "zod";
 import { SESSION_COOKIE } from "./session.ts";
@@ -144,10 +150,12 @@ const OPERATIONS: Operation[] = [
   {
     method: "post",
     path: "/links",
-    summary: "Create a link, with a custom slug or a generated one.",
+    summary:
+      "Create a link, with a custom slug or a generated one. The destination's host is screened (422 " +
+      "destination_flagged); a session may send screening: \"skip\" to save it anyway.",
     body: "CreateLinkRequest",
     success: { status: 201, description: "The created link.", schema: "Link" },
-    errors: [...BODY_ERRORS, 401, 403, 409],
+    errors: [...BODY_ERRORS, 401, 403, 409, 422],
   },
   {
     method: "get",
@@ -170,11 +178,11 @@ const OPERATIONS: Operation[] = [
     path: "/links/{slug}",
     summary:
       "Edit a link as a merge-patch: destination, title (null clears it), enabled. An empty {} still rewrites the " +
-      "redirect cache entry.",
+      "redirect cache entry. A destination is screened like on creation.",
     parameters: [SLUG_PARAMETER],
     body: "UpdateLinkRequest",
     success: { status: 200, description: "The edited link.", schema: "Link" },
-    errors: [...BODY_ERRORS, 401, 403, 404],
+    errors: [...BODY_ERRORS, 401, 403, 404, 422],
   },
   {
     method: "delete",
@@ -183,6 +191,55 @@ const OPERATIONS: Operation[] = [
     parameters: [SLUG_PARAMETER],
     success: { status: 204, description: "Deleted." },
     errors: [401, 403, 404],
+  },
+  {
+    method: "get",
+    path: "/settings",
+    summary: "The instance settings: the root destination, Access mode and read-only instance facts.",
+    success: { status: 200, description: "The settings.", schema: "Settings" },
+    errors: [401],
+  },
+  {
+    method: "patch",
+    path: "/settings",
+    summary:
+      "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are " +
+      "read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is " +
+      "screened like a link's destination.",
+    body: "UpdateSettingsRequest",
+    success: { status: 200, description: "The settings after the edit.", schema: "Settings" },
+    errors: [...BODY_ERRORS, 401, 403, 422],
+  },
+  {
+    method: "post",
+    path: "/password",
+    summary: "Change the operator password after re-entering the current one; ends every session. Session only.",
+    sessionOnly: true,
+    body: "ChangePasswordRequest",
+    success: { status: 204, description: "Changed; every session is ended and this one's cookie cleared." },
+    errors: [...BODY_ERRORS, 401, 403],
+  },
+  {
+    method: "get",
+    path: "/links/{slug}/stats",
+    summary:
+      "A link's click breakdowns for the range: series (hourly for 24h, daily otherwise, zero-filled), top 10 " +
+      "countries, top 10 referrer hosts and device classes. Last 90 days, estimated. 503 analytics_unavailable " +
+      "when breakdowns are not configured, naming what is missing.",
+    parameters: [SLUG_PARAMETER, ...queryParameters(StatsQuery)],
+    success: { status: 200, description: "The link's breakdowns.", schema: "LinkStats" },
+    errors: [400, 401, 404, 503],
+  },
+  {
+    method: "get",
+    path: "/stats",
+    summary:
+      "The instance overview: clicks today, in the last 7 and 30 days, the top 10 links for the range and a " +
+      "series per link with a click in the range. Last 90 days, estimated. 503 analytics_unavailable when " +
+      "breakdowns are not configured.",
+    parameters: queryParameters(StatsQuery),
+    success: { status: 200, description: "The overview.", schema: "InstanceStats" },
+    errors: [400, 401, 503],
   },
   {
     method: "get",
@@ -224,17 +281,27 @@ export function buildOpenApiDocument(version: string): JsonSchema {
         apiKey: { type: "http", scheme: "bearer", description: "An API key, furea_…; read or write scope." },
       },
       schemas: {
-        ...components("input", { CreateApiKeyRequest, CreateLinkRequest, LoginRequest, UpdateLinkRequest }),
+        ...components("input", {
+          ChangePasswordRequest,
+          CreateApiKeyRequest,
+          CreateLinkRequest,
+          LoginRequest,
+          UpdateLinkRequest,
+          UpdateSettingsRequest,
+        }),
         ...components("output", {
           ApiKey,
           ApiKeyList,
           CreatedApiKey,
           ErrorDetail,
           ErrorEnvelope,
+          InstanceStats,
           Link,
           LinkPage,
+          LinkStats,
           LoginMethodResponse,
           SessionResponse,
+          Settings,
         }),
       },
       responses: {

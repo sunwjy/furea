@@ -48,6 +48,7 @@
     "crons": ["*/5 * * * *"]
   },
   "vars": {
-    "FUREA_VERSION": "0.0.0-dev"
+    "FUREA_VERSION": "0.0.0-dev",
+    "FUREA_ACCOUNT_ID": "00000000000000000000000000000000"
   }
 }

@@ -48,13 +48,18 @@ const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/auth/session", expect: ANY_CALLER },
   { method: "GET", path: "/links", expect: ANY_CALLER },
   { method: "GET", path: `/links/${SLUG}`, expect: ANY_CALLER },
+  // No analytics token in the test instance: a caller allowed to read is answered 503, past the check.
+  { method: "GET", path: `/links/${SLUG}/stats`, expect: ANY_CALLER },
+  { method: "GET", path: "/stats", expect: ANY_CALLER },
   { method: "POST", path: "/links", body: { destination: "https://example.com/authz" }, expect: WRITE },
   { method: "PATCH", path: `/links/${SLUG}`, body: {}, expect: WRITE },
   { method: "DELETE", path: `/links/${SLUG}`, expect: WRITE },
   { method: "GET", path: "/api-keys", expect: SESSION_ONLY },
   { method: "POST", path: "/api-keys", body: { name: "minted", scope: "write" }, expect: SESSION_ONLY },
   { method: "DELETE", path: "/api-keys/doesNotExist", expect: SESSION_ONLY },
-  // Logging out ends the session, so it runs last and with its own session.
+  { method: "GET", path: "/settings", expect: ANY_CALLER },
+  { method: "PATCH", path: "/settings", body: { rootDestination: null }, expect: WRITE },
+  // Logging out and changing the password end sessions, so they run last and with their own session.
 ];
 
 function call(endpoint: Endpoint, headers: Record<string, string>): Promise<Response> {
@@ -83,6 +88,7 @@ describe("who may call what", () => {
         if (expected === "ok") {
           // The DELETE of an unknown key id is the session's 404: past the authorization check.
           if (endpoint.path === "/api-keys/doesNotExist") expect(res.status).toBe(404);
+          else if (endpoint.path.endsWith("/stats")) expect(res.status).toBe(503);
           else expect(res.ok, `status ${res.status}`).toBe(true);
           return;
         }
@@ -108,6 +114,23 @@ describe("who may call what", () => {
     expect((await call(logout, credentials.write)).status).toBe(403);
     const { id } = await startSession(env.DB);
     expect((await call(logout, { cookie: `${SESSION_COOKIE}=${id}` })).status).toBe(204);
+  });
+
+  it("refuses POST /password to API keys and lets a session past the authorization check", async () => {
+    // A wrong current password: the session gets the endpoint's own 401, nothing is changed.
+    const change: Endpoint = {
+      method: "POST",
+      path: "/password",
+      body: { currentPassword: "not the password", newPassword: "long enough new one" },
+      expect: SESSION_ONLY,
+    };
+    expect(await (await call(change, {})).json()).toMatchObject({ error: { code: "unauthorized" } });
+    expect((await call(change, credentials.read)).status).toBe(403);
+    expect((await call(change, credentials.write)).status).toBe(403);
+    const { id } = await startSession(env.DB);
+    expect(await (await call(change, { cookie: `${SESSION_COOKIE}=${id}` })).json()).toMatchObject({
+      error: { code: "invalid_password" },
+    });
   });
 });
 

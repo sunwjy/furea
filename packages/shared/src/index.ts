@@ -1,5 +1,6 @@
 export * from "./slug.ts";
 export type * from "./manifest.ts";
+export * from "./access.ts";
 export * from "./password.ts";
 export * from "./utm.ts";
 export * from "./fold.ts";

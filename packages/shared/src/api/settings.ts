@@ -2,6 +2,7 @@
 // destination; ADR 0003 password policy).
 
 import { z } from "zod";
+import { isAccessAud, isTeamDomain, normalizeTeamDomain } from "../access.ts";
 import { Destination, ScreeningOverride } from "./links.ts";
 
 export const PASSWORD_MIN_LENGTH = 12;
@@ -14,15 +15,11 @@ const ReadOnly = (what: string) =>
     .refine(() => false, { message: `${what} is read-only.`, params: { code: "read_only_field" } })
     .describe(`Never accepted: ${what} is read-only (read_only_field).`);
 
-/** A team's own label under Cloudflare's Access domain: the only host the Worker fetches public keys from. */
-const TEAM_DOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
-const AUD_MAX_LENGTH = 256;
-
 /** Lowercased, with an `https://` in front or a `/` behind tolerated, since that is how the dashboard shows it. */
 export const AccessTeamDomain = z
   .string()
-  .transform((value) => value.trim().toLowerCase().replace(/^https:\/\//, "").replace(/\/$/, ""))
-  .refine((value) => TEAM_DOMAIN.test(value), {
+  .transform(normalizeTeamDomain)
+  .refine(isTeamDomain, {
     message: "Use the team domain, like myteam.cloudflareaccess.com.",
     params: { code: "access_team_domain_invalid" },
   })
@@ -31,7 +28,7 @@ export const AccessTeamDomain = z
 export const AccessAud = z
   .string()
   .trim()
-  .refine((value) => value.length > 0 && value.length <= AUD_MAX_LENGTH && !/\s/.test(value), {
+  .refine(isAccessAud, {
     message: "Use the Application Audience (AUD) tag of the Access application.",
     params: { code: "access_aud_invalid" },
   })

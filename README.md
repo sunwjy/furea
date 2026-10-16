@@ -44,7 +44,7 @@ Every command takes `--name <instance>` (default `furea`). The Worker, the D1 da
 
 ### CI and non-interactive use
 
-Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` instead of logging in. For CI, prefer an **account-owned token** (`npx furea login --account-token` opens that form; only a Super Administrator can create one), so the pipeline survives staff turnover. Every prompt has a flag or environment-variable equivalent (`--account`, `--hostname`, `--workers-dev`, `--workers-subdomain`, `FUREA_ANALYTICS_TOKEN`); when stdin is not a terminal nothing is asked, and a missing value fails with the name of the flag to pass.
+Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` instead of logging in. For CI, prefer an **account-owned token** (`npx furea login --account-token` opens that form; only a Super Administrator can create one), so the pipeline survives staff turnover. Every prompt has a flag or environment-variable equivalent (`--account`, `--hostname`, `--workers-dev`, `--workers-subdomain`, `--team-domain`, `--aud`, `--confirm`, `FUREA_ANALYTICS_TOKEN`); when stdin is not a terminal nothing is asked, and a missing value fails with the name of the flag to pass.
 
 ## Upgrade
 
@@ -67,10 +67,10 @@ All commands accept `--name <instance>` and `--account <account id>` (needed onl
 | `logs` | Stream what the Worker is doing right now: time, outcome, method, path without its query string, and the Worker's own log lines and exceptions. Request headers, IP addresses and Cloudflare location data are dropped before printing. `--errors` shows only failures, `--json` prints one JSON object per line. Nothing is stored; past logs are in the Cloudflare dashboard (Workers & Pages → your instance → Observability). |
 | `login` / `logout` | Add or remove a deploy token in the local credentials file, one per account. `login --account-token` opens the account-owned token form instead of the user-token form. |
 | `domain set <hostname>` / `domain unset` | Attach your own domain (replacing a previous one and turning `workers.dev` off), or go back to `workers.dev`. `domain unset` takes `--workers-subdomain <name>` when the account has no `workers.dev` subdomain yet. Neither re-uploads the Worker. |
-| `analytics-token` | Create or replace the read-only analytics token (`Account Analytics Read`), stored as a Worker secret that survives every `deploy`. `--account-token` opens the account-owned token form. |
+| `analytics-token` | Create or replace the read-only analytics token (`Account Analytics Read`), stored as a Worker secret that survives every `deploy`. The token is verified before it is stored; `FUREA_ANALYTICS_TOKEN` supplies it without a prompt, and `--account-token` opens the account-owned token form. Without Analytics Engine on the account it is stored anyway, with a warning that breakdowns stay empty. |
 | `reset-password` | Set a new operator password directly in the database, log out every session and print the new password once. Access to your Cloudflare account is the proof of ownership. |
-| `access enable` / `access disable` | Turn Cloudflare Access mode on (with your Access team domain and application AUD) or off, even when you are locked out of the admin surface. Refused on a `workers.dev`-only instance. |
-| `destroy` | Delete the instance: custom domain, Worker, KV namespace and D1 database. You confirm by typing the instance name. `--keep-database` keeps the D1 database and its data. Your local deploy token stays (`logout` removes it). |
+| `access enable` / `access disable` | Turn Cloudflare Access mode on (`--team-domain <team>.cloudflareaccess.com --aud <tag>`, the Application Audience tag of your Access application; asked for when omitted at a terminal) or off, even when you are locked out of the admin surface. Enabling is refused on a `workers.dev`-only instance and when the team's public keys cannot be fetched, and it logs out every password session. |
+| `destroy` | Delete the instance: custom domain, Worker, KV namespace and D1 database. You confirm by typing the instance name (`--confirm <name>` where nothing can be asked, as in CI). `--keep-database` keeps the D1 database and its data. Your local deploy token stays (`logout` removes it). |
 
 `npx furea --help` lists the commands; `--version` prints the installer's version.
 

@@ -26,6 +26,11 @@ export interface FixtureSecrets {
   accountEnv?: string;
   /** The scenario cannot be produced on a real account (a contrived API answer); it always replays. */
   replayOnly?: boolean;
+  /**
+   * Further secrets the command reads from the environment (the analytics token), as variable → placeholder. Recording
+   * takes the real value from the variable and writes the placeholder; replaying hands out the placeholder.
+   */
+  extra?: Record<string, string>;
 }
 
 export interface FixtureSession {
@@ -34,6 +39,8 @@ export interface FixtureSession {
   token: string;
   /** The real account id when recording, its placeholder when replaying (undefined when not given). */
   accountId: string | undefined;
+  /** The `extra` variables with their real values when recording, their placeholders when replaying. */
+  extra: Record<string, string>;
   /** Replay: asserts every recorded request was made. Record: writes the fixture file. */
   done(): void;
 }
@@ -57,18 +64,27 @@ export function useFixture(scenario: string, secrets: FixtureSecrets = {}): Fixt
       accountId?: string;
     };
     const replay = replayFetch(fixture);
-    return { fetch: replay.fetch, token: fixture.token, accountId: fixture.accountId, done: replay.done };
+    return { fetch: replay.fetch, token: fixture.token, accountId: fixture.accountId, extra: { ...secrets.extra }, done: replay.done };
   }
   const token = process.env[secrets.tokenEnv ?? "CLOUDFLARE_API_TOKEN"];
   if (!token) throw new Error(`Recording ${scenario} needs ${secrets.tokenEnv ?? "CLOUDFLARE_API_TOKEN"}.`);
   const accountId = secrets.accountEnv ? process.env[secrets.accountEnv] : undefined;
+  const extra = Object.fromEntries(
+    Object.keys(secrets.extra ?? {}).map((variable) => {
+      const value = process.env[variable];
+      if (!value) throw new Error(`Recording ${scenario} needs ${variable}.`);
+      return [variable, value];
+    }),
+  );
   const recorder = recordingFetch(globalThis.fetch);
   return {
     fetch: recorder.fetch,
     token,
     accountId,
+    extra,
     done() {
       const known: Array<[string, string]> = [[token, tokenPlaceholder(token)]];
+      for (const [variable, placeholder] of Object.entries(secrets.extra ?? {})) known.push([extra[variable]!, placeholder]);
       if (accountId) known.push([accountId, ACCOUNT_PLACEHOLDER]);
       const fixture = sanitize({ interactions: recorder.interactions }, known);
       const header = { token: tokenPlaceholder(token), ...(accountId ? { accountId: ACCOUNT_PLACEHOLDER } : {}) };

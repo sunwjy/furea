@@ -7,12 +7,16 @@ import { accessDisable, accessEnable } from "./commands/access.ts";
 import { analyticsToken } from "./commands/analytics-token.ts";
 import { destroy } from "./commands/destroy.ts";
 import { deploy } from "./commands/deploy.ts";
+import { domainSet, domainUnset } from "./commands/domain.ts";
 import { login, logout } from "./commands/login.ts";
+import { logs } from "./commands/logs.ts";
 import { resetPassword } from "./commands/reset-password.ts";
 import type { CommandContext } from "./context.ts";
 import { CredentialsFile } from "./credentials.ts";
+import { normalizeHostname } from "./hostname.ts";
 import { CliError, type Io } from "./io.ts";
 import { type Installer, ownInstaller, packageVersion } from "./package-files.ts";
+import { type Clock, systemClock, type TailTransport, webSocketTransport } from "./tail-socket.ts";
 
 export interface CliDeps {
   fetch: typeof fetch;
@@ -21,6 +25,12 @@ export interface CliDeps {
   io: Io;
   /** The package `deploy` installs; this package unless a test substitutes a fixed one. */
   installer?: Installer;
+  /** Opens the tail's `trace-v1` WebSocket for `logs`; Node's WebSocket unless a test drives the sockets. */
+  tail?: TailTransport;
+  /** Renews the tail at `expires_at`; real timers unless a test fires them. */
+  clock?: Clock;
+  /** Called only by long-running commands: a signal aborted on Ctrl-C, so `logs` can delete its tail. */
+  untilInterrupted?: () => AbortSignal;
 }
 
 // workers.dev rules (ADR 0006): at most 63 characters, alphanumerics and dashes, no leading or trailing dash.
@@ -42,15 +52,19 @@ const COMMANDS = [
 const USAGE = `Usage: furea [command] [--name <instance>] [--account <account id>]
 
 Commands:
-  deploy (default)   Install or upgrade an instance (--workers-subdomain <name>, --allow-downgrade)
+  deploy (default)   Install or upgrade an instance (--hostname <hostname> | --workers-dev,
+                     --workers-subdomain <name>, --allow-downgrade)
   login              Store a deploy token (--account-token opens the account-owned token form)
   logout             Remove a stored deploy token
+  logs               Stream live events, without storing anything (--errors, --json)
+  domain set <hostname>  Attach a Workers Custom Domain and turn workers.dev off
+  domain unset       Detach the custom domain and answer on workers.dev (--workers-subdomain <name>)
   analytics-token    Store the read-only analytics token (FUREA_ANALYTICS_TOKEN; --account-token for the account-owned form)
   reset-password     Replace the operator password and sign out every session
   access enable      Turn Cloudflare Access mode on (--team-domain <team>.cloudflareaccess.com, --aud <tag>); own domain only
   access disable     Turn Cloudflare Access mode off
   destroy            Delete the instance (--confirm <name> without a terminal, --keep-database)
-  status, logs, domain`;
+  status`;
 
 /** Runs one CLI invocation and returns its exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
@@ -64,8 +78,12 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         name: { type: "string", default: "furea" },
         account: { type: "string" },
         "account-token": { type: "boolean", default: false },
+        hostname: { type: "string" },
+        "workers-dev": { type: "boolean", default: false },
         "workers-subdomain": { type: "string" },
         "allow-downgrade": { type: "boolean", default: false },
+        errors: { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
         "team-domain": { type: "string" },
         aud: { type: "string" },
         "keep-database": { type: "boolean", default: false },
@@ -87,6 +105,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     if (!INSTANCE_NAME.test(values.name)) {
       throw new CliError(`"${values.name}" is not a valid instance name: up to 63 letters, digits and dashes, not starting or ending with a dash.`);
     }
+    if (values.hostname !== undefined && values["workers-dev"]) throw new CliError("Pass either --hostname or --workers-dev, not both.");
     const ctx: CommandContext = {
       fetch: deps.fetch,
       env: deps.env,
@@ -99,16 +118,36 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       case "deploy":
         await deploy(ctx, {
           installer: deps.installer ?? ownInstaller(),
-          workersSubdomain: values["workers-subdomain"],
+          hostname: {
+            hostname: values.hostname === undefined ? undefined : normalizeHostname(values.hostname),
+            workersDev: values["workers-dev"],
+            workersSubdomain: values["workers-subdomain"],
+          },
           allowDowngrade: values["allow-downgrade"],
         });
         return 0;
       case "login":
         await login(ctx, { accountToken: values["account-token"] });
         return 0;
+      case "logs":
+        await logs(ctx, {
+          errors: values.errors,
+          json: values.json,
+          transport: deps.tail ?? webSocketTransport,
+          clock: deps.clock ?? systemClock,
+          stop: deps.untilInterrupted?.() ?? new AbortController().signal,
+        });
+        return 0;
       case "logout":
         await logout(ctx);
         return 0;
+      case "domain": {
+        const [, action, hostname, ...rest] = positionals;
+        if (action === "set" && hostname !== undefined && rest.length === 0) await domainSet(ctx, normalizeHostname(hostname));
+        else if (action === "unset" && hostname === undefined) await domainUnset(ctx, values["workers-subdomain"]);
+        else throw new CliError(`Usage: furea domain set <hostname> | furea domain unset`);
+        return 0;
+      }
       case "analytics-token":
         await analyticsToken(ctx, { accountToken: values["account-token"] });
         return 0;

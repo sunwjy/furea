@@ -1,4 +1,4 @@
-// `furea deploy` (the default command): install or upgrade an instance on workers.dev, in the step order of
+// `furea deploy` (the default command): install or upgrade an instance, in the step order of
 // ADR 0006. Every resource is found by instance name and every setting is re-declared, so running it again
 // is both the upgrade and the recovery from any failure. Each step prints one `create` / `reuse` / `skip` line.
 
@@ -12,8 +12,9 @@ import { type Binding, CloudflareApiError, CloudflareClient } from "../cloudflar
 import type { CommandContext } from "../context.ts";
 import { resolveDeployCredentials } from "../credentials.ts";
 import { verifyDeployToken } from "../deploy-token.ts";
-import { ask, CliError, type Io } from "../io.ts";
+import { CliError, step } from "../io.ts";
 import { ANALYTICS_ENGINE_DOCS } from "../links.ts";
+import { HOSTNAME_CHOICE_FLAGS, type HostnameChoice, resolveHostname } from "../hostname.ts";
 import { applyMigrations } from "../migrations.ts";
 import type { Installer } from "../package-files.ts";
 import { isNewer } from "../version.ts";
@@ -22,8 +23,8 @@ import { login } from "./login.ts";
 
 export interface DeployOptions {
   installer: Installer;
-  /** `--workers-subdomain`: the account-wide workers.dev subdomain to register when there is none. */
-  workersSubdomain: string | undefined;
+  /** `--hostname` / `--workers-dev` / `--workers-subdomain`: the first-run hostname choice (ADR 0006 step 8). */
+  hostname: HostnameChoice;
   allowDowngrade: boolean;
 }
 
@@ -44,12 +45,6 @@ const ANALYTICS_ENGINE_DISABLED = 10089;
 
 /** ADR 0003: 24 characters from the slug alphabet. */
 export const OPERATOR_PASSWORD_LENGTH = 24;
-
-type Action = "create" | "reuse" | "skip";
-
-function step(io: Io, name: string, action: Action, detail: string): void {
-  io.out(`${name}  ${action}  ${detail}`);
-}
 
 export async function deploy(ctx: CommandContext, options: DeployOptions): Promise<void> {
   const { io, name } = ctx;
@@ -76,6 +71,10 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
   }
   const deployed = await client.getScriptBindings(accountId, name);
   const deployedVersion = deployed && plainText(deployed, "FUREA_VERSION");
+  if (!deployed && !io.interactive && !options.hostname.hostname && !options.hostname.workersDev) {
+    // A first install needs the hostname choice; without a terminal, stop before anything is uploaded.
+    throw new CliError(`First install of "${name}": pass ${HOSTNAME_CHOICE_FLAGS} (stdin is not a terminal, so nothing is prompted).`);
+  }
 
   // 3. Version gate.
   const downgrade = deployedVersion !== undefined && isNewer(deployedVersion, installer.version);
@@ -142,8 +141,8 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
     step(io, "cron", "create", manifest.crons.join(", "));
   }
 
-  // 8. Hostname: workers.dev.
-  const url = await enableWorkersDev(ctx, client, accountId, options.workersSubdomain);
+  // 8. Hostname: whatever is attached, else the first-run choice.
+  const url = await resolveHostname(ctx, client, accountId, options.hostname, deployed !== undefined);
 
   // 9. Operator password, once: the insert does nothing when a hash is already stored.
   const password = randomAlphabetString(OPERATOR_PASSWORD_LENGTH);
@@ -205,27 +204,6 @@ export function bindingsFor(manifest: WorkerManifest, values: BindingValues): Bi
 
 function sameSet(a: string[], b: string[]): boolean {
   return a.length === b.length && [...a].sort().every((value, i) => value === [...b].sort()[i]);
-}
-
-async function enableWorkersDev(ctx: CommandContext, client: CloudflareClient, accountId: string, wanted: string | undefined): Promise<string> {
-  let created = false;
-  let subdomain = await client.getAccountSubdomain(accountId);
-  if (subdomain === undefined) {
-    // Account-wide and permanent-looking, so it is asked for rather than invented (ADR 0006).
-    const choice =
-      wanted ??
-      (await ask(ctx.io, "No workers.dev subdomain on this account yet. Choose one (account-wide, <name>.workers.dev): ", "--workers-subdomain"));
-    subdomain = await client.putAccountSubdomain(accountId, choice);
-    created = true;
-  }
-  const current = await client.getScriptSubdomain(accountId, ctx.name);
-  if (!current.enabled) {
-    await client.setScriptSubdomain(accountId, ctx.name, { enabled: true, previews_enabled: false });
-    created = true;
-  }
-  const url = `https://${ctx.name}.${subdomain}.workers.dev`;
-  step(ctx.io, "workers.dev", created ? "create" : "reuse", url);
-  return url;
 }
 
 async function offerAnalyticsToken(ctx: CommandContext, client: CloudflareClient, accountId: string, clicks: boolean): Promise<void> {

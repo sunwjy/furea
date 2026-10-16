@@ -28,7 +28,7 @@ export async function destroy(ctx: CommandContext, options: DestroyOptions): Pro
   }
 
   const { client, accountId } = await connect(ctx);
-  const domains = await client.listWorkerDomains(accountId, name);
+  const domains = await client.listWorkerDomains(accountId, { service: name });
   const script = await client.getScriptBindings(accountId, name);
   const kv = await client.findKvNamespace(accountId, name);
   const database = await client.findD1Database(accountId, name);
@@ -49,7 +49,7 @@ export async function destroy(ctx: CommandContext, options: DestroyOptions): Pro
 
   if (domains.length === 0) line(io, "domain", "skip", "none attached");
   for (const domain of domains) {
-    await client.deleteWorkerDomain(accountId, domain.id);
+    await client.detachWorkerDomain(accountId, domain.id);
     line(io, "domain", "delete", domain.hostname);
   }
   if (script) {

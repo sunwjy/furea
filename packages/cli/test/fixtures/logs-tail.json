@@ -1,0 +1,45 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/tails",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "filters": []
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_1",
+            "url": "wss://tail.developers.workers.dev/ID_1",
+            "expires_at": "2026-10-16T16:00:00Z"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/tails/ID_1",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": null
+        }
+      }
+    }
+  ]
+}

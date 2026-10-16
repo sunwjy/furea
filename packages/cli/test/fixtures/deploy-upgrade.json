@@ -350,7 +350,7 @@
     {
       "request": {
         "method": "GET",
-        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/subdomain",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/domains?service=furea",
         "authorization": "Bearer TOKEN"
       },
       "response": {
@@ -359,8 +359,12 @@
           "success": true,
           "errors": [],
           "messages": [],
-          "result": {
-            "subdomain": "SUBDOMAIN_1"
+          "result": [],
+          "result_info": {
+            "page": 1,
+            "per_page": 50,
+            "count": 0,
+            "total_count": 0
           }
         }
       }
@@ -380,6 +384,24 @@
           "result": {
             "enabled": true,
             "previews_enabled": false
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/subdomain",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "subdomain": "SUBDOMAIN_1"
           }
         }
       }

@@ -27,7 +27,7 @@ export async function accessEnable(ctx: CommandContext, options: AccessEnableOpt
   const connection = await connect(ctx);
   const { client, accountId } = connection;
   const database = await instanceDatabase(ctx, connection);
-  const [domain] = await client.listWorkerDomains(accountId, ctx.name);
+  const [domain] = await client.listWorkerDomains(accountId, { service: ctx.name });
   if (!domain) {
     throw new CliError(
       `"${ctx.name}" is only on workers.dev. Access mode needs the instance on its own domain, because an Access ` +

@@ -1,0 +1,30 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/tails",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "filters": []
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "success": false,
+          "errors": [
+            {
+              "code": 10007,
+              "message": "This Worker does not exist on your account."
+            }
+          ],
+          "messages": [],
+          "result": null
+        }
+      }
+    }
+  ]
+}

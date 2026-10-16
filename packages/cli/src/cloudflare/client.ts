@@ -74,13 +74,27 @@ export interface ScriptSubdomain {
   previews_enabled?: boolean;
 }
 
-/** A Workers Custom Domain attached to a script. */
+export interface Tail {
+  id: string;
+  /** The `trace-v1` WebSocket; the URL itself is the capability. */
+  url: string;
+  /** Delivery silently stops here, so the CLI recreates the tail itself. */
+  expires_at: string;
+}
+
+export interface Zone {
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** A Workers Custom Domain: a whole hostname routed to a Worker, DNS record and certificate managed by Cloudflare. */
 export interface WorkerDomain {
   id: string;
   hostname: string;
   service: string;
-  zone_id?: string;
-  zone_name?: string;
+  zone_id: string;
+  zone_name: string;
 }
 
 export interface CloudflareClientOptions {
@@ -250,20 +264,42 @@ export class CloudflareClient {
     return this.request<ScriptSubdomain>("POST", `/accounts/${accountId}/workers/scripts/${script}/subdomain`, value);
   }
 
+  // Live tail (ADR 0011): the deploy token's Workers Scripts Edit is enough.
+
+  createTail(accountId: string, script: string): Promise<Tail> {
+    return this.request<Tail>("POST", `/accounts/${accountId}/workers/scripts/${script}/tails`, { filters: [] });
+  }
+
+  async deleteTail(accountId: string, script: string, id: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/workers/scripts/${script}/tails/${id}`);
+  }
+
   async putSecret(accountId: string, script: string, name: string, text: string): Promise<void> {
     await this.request("PUT", `/accounts/${accountId}/workers/scripts/${script}/secrets`, { name, text, type: "secret_text" });
   }
 
-  // Instance management: `access`, `destroy` (ADR 0006 *Command surface*).
+  // Workers Custom Domains (ADR 0006 step 8, `domain set|unset`).
 
-  /** The Custom Domains attached to the script; empty on a workers.dev-only instance. */
-  listWorkerDomains(accountId: string, script: string): Promise<WorkerDomain[]> {
-    return this.request<WorkerDomain[]>("GET", `/accounts/${accountId}/workers/domains?service=${encodeURIComponent(script)}`);
+  /** The zone of exactly this name in the account, if any. */
+  async findZone(accountId: string, name: string): Promise<Zone | undefined> {
+    const zones = await this.request<Zone[]>("GET", `/zones?name=${encodeURIComponent(name)}&account.id=${accountId}`);
+    return zones.find((zone) => zone.name === name);
   }
 
-  async deleteWorkerDomain(accountId: string, domainId: string): Promise<void> {
-    await this.request("DELETE", `/accounts/${accountId}/workers/domains/${domainId}`);
+  listWorkerDomains(accountId: string, filter: { service: string } | { hostname: string }): Promise<WorkerDomain[]> {
+    const query = "service" in filter ? `service=${encodeURIComponent(filter.service)}` : `hostname=${encodeURIComponent(filter.hostname)}`;
+    return this.request<WorkerDomain[]>("GET", `/accounts/${accountId}/workers/domains?${query}`);
   }
+
+  attachWorkerDomain(accountId: string, domain: { hostname: string; service: string; zone_id: string }): Promise<WorkerDomain> {
+    return this.request<WorkerDomain>("PUT", `/accounts/${accountId}/workers/domains`, domain);
+  }
+
+  async detachWorkerDomain(accountId: string, domainId: string): Promise<void> {
+    await this.send("DELETE", `/accounts/${accountId}/workers/domains/${domainId}`);
+  }
+
+  // `destroy` (ADR 0006 *destroy*).
 
   /** Its secrets, schedules and workers.dev route go with it. */
   async deleteScript(accountId: string, script: string): Promise<void> {

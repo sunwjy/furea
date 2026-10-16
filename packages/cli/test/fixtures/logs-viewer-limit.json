@@ -1,0 +1,30 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/tails",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "filters": []
+        }
+      },
+      "response": {
+        "status": 429,
+        "body": {
+          "success": false,
+          "errors": [
+            {
+              "code": 10057,
+              "message": "Too many tail sessions: a maximum of 10 clients can view this Worker's logs at one time"
+            }
+          ],
+          "messages": [],
+          "result": null
+        }
+      }
+    }
+  ]
+}

@@ -164,6 +164,21 @@ describe("furea logs", () => {
     expect(run.timers.at(-1)).toMatchObject({ ms: 12 * 60 * 60 * 1000, cancelled: true });
   });
 
+  it("deletes both tails and exits on Ctrl-C while a renewal is opening", async () => {
+    const run = await logs("logs-tail-renewed");
+    await run.connected(1);
+
+    run.timers[0]!.fire();
+    run.interrupt();
+
+    expect(await run.exit).toBe(0);
+    run.api.done();
+    const deleted = run.sent.filter((s) => s.method === "DELETE").map((s) => s.url.split("/").at(-1));
+    expect(deleted.sort()).toEqual(["ID_1", "ID_2"]);
+    expect(run.sockets.map((s) => s.closed)).toEqual([true, true]);
+    expect(run.timers.every((t) => t.cancelled || t === run.timers[0])).toBe(true);
+  });
+
   it("deletes the tail and fails when the connection drops", async () => {
     const run = await logs("logs-tail");
     await run.connected(1);

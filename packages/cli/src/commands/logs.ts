@@ -71,12 +71,17 @@ export async function logs(ctx: CommandContext, options: LogsOptions): Promise<v
   };
 
   let session = await open();
+  let ending = false;
   let cancelRenewal = () => {};
+  /** The renewal in flight, if any: awaited on exit so the tail it opens is deleted too. */
+  let renewal: Promise<void> = Promise.resolve();
   const scheduleRenewal = () => {
     cancelRenewal = options.clock.setTimeout(() => {
       // The new tail is open before the old one goes, so no event falls between them.
-      open()
+      renewal = open()
         .then(async (next) => {
+          // Ctrl-C (or a drop) while it opened: the exit closes `session`, this one is closed here.
+          if (ending) return close(next);
           const previous = session;
           session = next;
           scheduleRenewal();
@@ -95,9 +100,11 @@ export async function logs(ctx: CommandContext, options: LogsOptions): Promise<v
   else options.stop.addEventListener("abort", stopped, { once: true });
 
   const reason = await ended;
+  ending = true;
   options.stop.removeEventListener("abort", stopped);
   cancelRenewal();
   await close(session);
+  await renewal;
   if (reason instanceof Error) throw reason;
   if (reason === "dropped") throw new CliError("The log tail connection closed. Run furea logs again to reconnect.");
 }

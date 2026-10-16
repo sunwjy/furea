@@ -112,6 +112,15 @@ Campaigns add nothing here: their logic lives entirely in the Worker and is cove
 
 On `main` pushes the job reports only. In `release.yml` it runs **before `changeset publish`** and a failure stops the release: a version that cannot install on a real account must never become `latest`.
 
+How the script does it:
+
+- The orchestration is `scripts/lib/integration.mjs`, `runIntegration(deps)`, with every effect injected (each CLI build's `run(args)`, `fetch`, the clock, the resource listing); `scripts/lib/integration.test.mjs` runs it against a fake CLI and a fake instance at the HTTP boundary. `scripts/integration.mjs` wires in the real ones and refuses to start without `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- Both builds are tarballs, unpacked and run as `node package/bin/furea.js` with stdin not a terminal, an empty config directory (credentials from the environment only) and no `FUREA_ANALYTICS_TOKEN`. The candidate is `pnpm pack` of the built `packages/cli` (or `--candidate <tarball>`); `latest` is `npm pack furea@latest`, absent on `E404` only.
+- Deploys pass `--workers-dev --no-update-check`; `destroy` passes `--confirm <name>`. The sweep lists Workers scripts and D1 databases named `furea-ci-*` with their creation times and destroys those over a day old with the candidate; any failure there is a `warning:` line.
+- A fresh workers.dev route takes a while to answer, and an upload a while to reach every location, so the smoke set waits (up to three minutes) until `GET /api/v1/openapi.json` reports the expected version before it runs.
+- The instance is `furea-ci-<short sha>` in `ci.yml` and `furea-ci-rel-<short sha>` in `release.yml` (`--name`), because both run on a release PR's merge commit.
+- `FUREA_RECORD_FIXTURES=1 pnpm test:integration` re-records the CLI's unit fixtures after a passing run, by running `packages/cli`'s vitest suite in record mode against the same account (see *Unit: fixture-replaying `fetch`*).
+
 ### The Rate Limiting smoke script
 
 `scripts/rate-limit-smoke.mjs` (ticket [#17](https://github.com/sunwjy/furea/issues/17)) stays a **manual tool**. The integration job already uploads a Worker with both `ratelimit` bindings, so a plan-level rejection would surface there; the limiter's own behaviour (per-location, permissive) is Cloudflare's to guarantee and would only make an assertion flaky. Run the script by hand when a plan change or an API change is suspected.

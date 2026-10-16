@@ -1,0 +1,128 @@
+name: Release
+
+# One file for both publish paths, because npm trusted publishing binds one workflow filename (ADR 0010,
+# docs/release.md). Pushes to main version (the release PR) or, once the release PR is merged, gate and publish;
+# a manual dispatch publishes a snapshot.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to publish as a snapshot (default: the dispatched ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # publish=true only for a merged release PR: no pending changesets and a version npm does not have yet.
+      - id: plan
+        run: node scripts/release-plan.mjs
+
+  # The Integration hard gate (docs/testing.md): a version that cannot install and upgrade on a real account never
+  # becomes latest. Its own job, so the Cloudflare secrets stay in cloudflare-ci and out of npm-publish.
+  integration:
+    name: Integration (gate)
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: cloudflare-ci
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build
+      # Not ci.yml's furea-ci-<sha>: both run on the release PR's merge commit.
+      - run: node scripts/integration.mjs --name "furea-ci-rel-${GITHUB_SHA::7}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  release:
+    name: Release
+    needs: [plan, integration]
+    # Runs on every push (pending changesets open the release PR); publishes only when the gate passed.
+    if: >-
+      always() && github.event_name == 'push' && needs.plan.result == 'success'
+      && (needs.integration.result == 'success' || needs.integration.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      # No registry-url: it writes an .npmrc expecting NODE_AUTH_TOKEN, which shadows trusted publishing (OIDC).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - if: needs.plan.outputs.publish == 'true'
+        run: pnpm --filter @furea/admin exec playwright install --with-deps chromium
+      # `pnpm release` = Static, Unit, tarball check, migration check, E2E, Compat, then `changeset publish`.
+      - uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: ${{ needs.plan.outputs.publish == 'true' && 'pnpm release' || '' }}
+          createGithubReleases: true
+          commitMode: github-api
+          title: "chore: release furea"
+          commit: "chore: release furea"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+
+  snapshot:
+    name: Snapshot
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `changeset version --snapshot` needs a changeset to version from; a branch without one gets a patch.
+      - name: Version as 0.0.0-<sha>-<timestamp>
+        run: |
+          if ! ls .changeset/*.md | grep -qv '/README\.md$'; then
+            printf -- '---\n"furea": patch\n---\n\nSnapshot build.\n' > .changeset/snapshot.md
+          fi
+          pnpm changeset version --snapshot "$(git rev-parse --short=7 HEAD)"
+      - run: pnpm release:snapshot
+        env:
+          NPM_CONFIG_PROVENANCE: "true"

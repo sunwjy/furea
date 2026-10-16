@@ -47,12 +47,7 @@ export async function runSmoke(baseUrl, { password, slug = `smoke-${Date.now().t
   if (create.status !== 201) throw new SmokeError("create link", await describe(create));
   log(`ok  create link /${slug}`);
 
-  const redirect = await fetch(`${origin}/${slug}`, { redirect: "manual" });
-  const location = redirect.headers.get("location");
-  if (redirect.status !== 302 || location !== destination) {
-    throw new SmokeError("redirect", `expected 302 to ${destination}, got ${redirect.status} to ${location}`);
-  }
-  await redirect.body?.cancel();
+  await expectRedirect(origin, { slug, destination }, { fetch });
   log("ok  redirect 302");
 
   const list = await fetch(`${origin}/api/v1/links`, { headers: session });
@@ -63,5 +58,37 @@ export async function runSmoke(baseUrl, { password, slug = `smoke-${Date.now().t
   }
   log("ok  list");
 
-  return { slug, destination };
+  return { slug, destination, session };
+}
+
+/**
+ * The short URL answers 302 to the link's destination.
+ * @param {string} baseUrl @param {{ slug: string, destination: string }} link @param {{ fetch?: typeof fetch }} [options]
+ */
+export async function expectRedirect(baseUrl, { slug, destination }, { fetch = globalThis.fetch } = {}) {
+  const redirect = await fetch(`${new URL(baseUrl).origin}/${slug}`, { redirect: "manual" });
+  const location = redirect.headers.get("location");
+  await redirect.body?.cancel();
+  if (redirect.status !== 302 || location !== destination) {
+    throw new SmokeError("redirect", `expected /${slug} to answer 302 to ${destination}, got ${redirect.status} to ${location}`);
+  }
+}
+
+/**
+ * The link's stats answer `503 analytics_unavailable`: an instance without an analytics token (ADR 0009).
+ * @param {string} baseUrl @param {string} slug @param {{ cookie: string, origin: string }} session
+ * @param {{ fetch?: typeof fetch }} [options]
+ */
+export async function expectStatsUnavailable(baseUrl, slug, session, { fetch = globalThis.fetch } = {}) {
+  const res = await fetch(`${new URL(baseUrl).origin}/api/v1/links/${slug}/stats`, { headers: session });
+  const text = await res.text();
+  let code;
+  try {
+    code = JSON.parse(text)?.error?.code;
+  } catch {
+    // Reported below with the raw body.
+  }
+  if (res.status !== 503 || code !== "analytics_unavailable") {
+    throw new SmokeError("stats", `expected 503 analytics_unavailable, got ${res.status} ${text.slice(0, 300)}`);
+  }
 }

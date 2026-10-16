@@ -5,10 +5,12 @@ import { parseArgs } from "node:util";
 import { CloudflareApiError } from "./cloudflare/client.ts";
 import { deploy } from "./commands/deploy.ts";
 import { login, logout } from "./commands/login.ts";
+import { logs } from "./commands/logs.ts";
 import type { CommandContext } from "./context.ts";
 import { CredentialsFile } from "./credentials.ts";
 import { CliError, type Io } from "./io.ts";
 import { type Installer, ownInstaller, packageVersion } from "./package-files.ts";
+import { type Clock, systemClock, type TailTransport, webSocketTransport } from "./tail-socket.ts";
 
 export interface CliDeps {
   fetch: typeof fetch;
@@ -17,6 +19,12 @@ export interface CliDeps {
   io: Io;
   /** The package `deploy` installs; this package unless a test substitutes a fixed one. */
   installer?: Installer;
+  /** Opens the tail's `trace-v1` WebSocket for `logs`; Node's WebSocket unless a test drives the sockets. */
+  tail?: TailTransport;
+  /** Renews the tail at `expires_at`; real timers unless a test fires them. */
+  clock?: Clock;
+  /** Called only by long-running commands: a signal aborted on Ctrl-C, so `logs` can delete its tail. */
+  untilInterrupted?: () => AbortSignal;
 }
 
 // workers.dev rules (ADR 0006): at most 63 characters, alphanumerics and dashes, no leading or trailing dash.
@@ -41,7 +49,8 @@ Commands:
   deploy (default)   Install or upgrade an instance (--workers-subdomain <name>, --allow-downgrade)
   login              Store a deploy token (--account-token opens the account-owned token form)
   logout             Remove a stored deploy token
-  status, logs, domain, analytics-token, reset-password, access, destroy`;
+  logs               Stream live events, without storing anything (--errors, --json)
+  status, domain, analytics-token, reset-password, access, destroy`;
 
 /** Runs one CLI invocation and returns its exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
@@ -57,6 +66,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         "account-token": { type: "boolean", default: false },
         "workers-subdomain": { type: "string" },
         "allow-downgrade": { type: "boolean", default: false },
+        errors: { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
         version: { type: "boolean", short: "v", default: false },
       },
@@ -92,6 +103,15 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         return 0;
       case "login":
         await login(ctx, { accountToken: values["account-token"] });
+        return 0;
+      case "logs":
+        await logs(ctx, {
+          errors: values.errors,
+          json: values.json,
+          transport: deps.tail ?? webSocketTransport,
+          clock: deps.clock ?? systemClock,
+          stop: deps.untilInterrupted?.() ?? new AbortController().signal,
+        });
         return 0;
       case "logout":
         await logout(ctx);

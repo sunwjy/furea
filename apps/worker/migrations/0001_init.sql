@@ -16,7 +16,7 @@ CREATE INDEX IF NOT EXISTS links_created_at_slug ON links (created_at, slug);
 CREATE INDEX IF NOT EXISTS links_sync_pending ON links (updated_at, slug) WHERE cache_synced = 0;
 
 -- Instance settings as key/value rows (ADR 0003, ADR 0009): the operator password hash, the login limiter's
--- IP-hash salt, and later the root destination and Access mode.
+-- IP-hash salt, the root destination with its sync-pending marker (ADR 0008), and later Access mode.
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT NOT NULL PRIMARY KEY,
   value TEXT NOT NULL

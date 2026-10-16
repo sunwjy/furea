@@ -3,8 +3,9 @@
 // the caller; the link becomes sync pending in D1 and a later pass repairs it. Takes the KV binding as an argument
 // so a test can inject a store that fails chosen writes.
 
-import { cacheEntryOf, writeCacheEntry } from "./cache.ts";
+import { cacheEntryOf, deleteCacheEntry, ROOT_CACHE_KEY, writeCacheEntry } from "./cache.ts";
 import { listSyncPending, markCacheSynced, markSyncPending, type LinkRow } from "./db/links.ts";
+import { getRootDestination, isRootSyncPending, markRootSynced, markRootSyncPending } from "./db/settings.ts";
 import { log } from "./log.ts";
 
 export interface SyncOptions {
@@ -15,10 +16,14 @@ export interface SyncOptions {
 const RETRY_DELAYS_MS = [250, 1000];
 
 /** Whether the link's current cache entry reached KV within three attempts. */
-async function putEntry(kv: KVNamespace, row: LinkRow, delays: readonly number[]): Promise<boolean> {
+const putEntry = (kv: KVNamespace, row: LinkRow, delays: readonly number[]) =>
+  withRetries(() => writeCacheEntry(kv, row.slug, cacheEntryOf(row)), delays);
+
+/** Whether `write` succeeded within three attempts. */
+async function withRetries(write: () => Promise<void>, delays: readonly number[]): Promise<boolean> {
   for (let attempt = 0; ; attempt++) {
     try {
-      await writeCacheEntry(kv, row.slug, cacheEntryOf(row));
+      await write();
       return true;
     } catch {
       const delay = delays[attempt];
@@ -47,6 +52,35 @@ export async function writeThrough(
   return { ...row, cache_synced: 0 };
 }
 
+/** Writes (or, when unset, deletes) the root destination's entry under the reserved key, as D1 now has it. */
+async function syncRoot(db: D1Database, kv: KVNamespace, delays: readonly number[]): Promise<boolean> {
+  const destination = await getRootDestination(db);
+  const synced = await withRetries(
+    () =>
+      destination === null
+        ? deleteCacheEntry(kv, ROOT_CACHE_KEY)
+        : writeCacheEntry(kv, ROOT_CACHE_KEY, { to: destination, disabled: false }),
+    delays,
+  );
+  if (synced) await markRootSynced(db, destination);
+  return synced;
+}
+
+/**
+ * `writeThrough` for the root destination (ADR 0008): call it after the D1 write. Returns whether the cache now
+ * matches; when it does not, the root is sync pending with a `cache_sync_failed` log under its key.
+ */
+export async function writeRootThrough(
+  db: D1Database,
+  kv: KVNamespace,
+  { retryDelaysMs = RETRY_DELAYS_MS }: SyncOptions = {},
+): Promise<boolean> {
+  if (await syncRoot(db, kv, retryDelaysMs)) return true;
+  await markRootSyncPending(db);
+  log({ event: "cache_sync_failed", slug: ROOT_CACHE_KEY });
+  return false;
+}
+
 export interface RepairResult {
   repaired: number;
   failed: number;
@@ -62,6 +96,11 @@ export async function repairSyncPending(
   { limit, retryDelaysMs = RETRY_DELAYS_MS }: SyncOptions & { limit?: number } = {},
 ): Promise<RepairResult> {
   const result: RepairResult = { repaired: 0, failed: 0 };
+  // The root destination is one more entry, outside the link limit: there is never more than one of it.
+  if (await isRootSyncPending(db)) {
+    if (await syncRoot(db, kv, retryDelaysMs)) result.repaired++;
+    else result.failed++;
+  }
   for (const row of await listSyncPending(db, limit)) {
     if (await putEntry(kv, row, retryDelaysMs)) {
       await markCacheSynced(db, row);

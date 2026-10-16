@@ -7,6 +7,12 @@ export interface CacheEntry {
   disabled: boolean;
 }
 
+/**
+ * The root destination's entry (ADR 0008): a key beginning with `_` can never be a slug (ADR 0002). Its `disabled` is
+ * always `false`; an unset root destination has no entry at all.
+ */
+export const ROOT_CACHE_KEY = "_";
+
 /** The edge read cache in front of KV (ADR 0004, *Read path*). */
 const READ_CACHE_TTL_SECONDS = 60;
 

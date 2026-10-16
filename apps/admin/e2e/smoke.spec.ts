@@ -168,3 +168,29 @@ test("6. see each link's lifetime total on its feed card", async () => {
   const card = page.getByRole("list", { name: "Links" }).getByRole("listitem").filter({ hasText: `/${SLUG}` });
   await expect(card.getByText("2 clicks", { exact: true })).toBeVisible();
 });
+
+test("7. set a root destination on the Settings page, land on it from /, and unset it", async () => {
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByText("npx furea@latest deploy")).toBeVisible();
+  await expect(page.getByText("Not configured")).toBeVisible();
+
+  const rootDestination = `http://127.0.0.1:${PORT}/robots.txt?from=root`;
+  const field = page.getByLabel("Where the bare hostname redirects");
+  await field.fill(rootDestination);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Root destination saved.")).toBeVisible();
+
+  const res = await page.request.get("/", { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
+  expect(res.headers()["location"]).toBe(rootDestination);
+  expect(res.headers()["cache-control"]).toBe("no-store");
+
+  // Empty unsets it: / is the unknown-slug response again.
+  await field.fill("");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Root destination removed.")).toBeVisible();
+  const unset = await page.request.get("/", { maxRedirects: 0 });
+  expect(unset.status()).toBe(404);
+  expect(await unset.text()).toBe(await (await page.request.get("/no-such-link")).text());
+});

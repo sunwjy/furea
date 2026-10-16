@@ -74,6 +74,21 @@ export interface ScriptSubdomain {
   previews_enabled?: boolean;
 }
 
+export interface Zone {
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** A Workers Custom Domain: a whole hostname routed to a Worker, DNS record and certificate managed by Cloudflare. */
+export interface WorkerDomain {
+  id: string;
+  hostname: string;
+  service: string;
+  zone_id: string;
+  zone_name: string;
+}
+
 export interface CloudflareClientOptions {
   token: string;
   fetch: typeof fetch;
@@ -243,5 +258,26 @@ export class CloudflareClient {
 
   async putSecret(accountId: string, script: string, name: string, text: string): Promise<void> {
     await this.request("PUT", `/accounts/${accountId}/workers/scripts/${script}/secrets`, { name, text, type: "secret_text" });
+  }
+
+  // Workers Custom Domains (ADR 0006 step 8, `domain set|unset`).
+
+  /** The zone of exactly this name in the account, if any. */
+  async findZone(accountId: string, name: string): Promise<Zone | undefined> {
+    const zones = await this.request<Zone[]>("GET", `/zones?name=${encodeURIComponent(name)}&account.id=${accountId}`);
+    return zones.find((zone) => zone.name === name);
+  }
+
+  listWorkerDomains(accountId: string, filter: { service: string } | { hostname: string }): Promise<WorkerDomain[]> {
+    const query = "service" in filter ? `service=${encodeURIComponent(filter.service)}` : `hostname=${encodeURIComponent(filter.hostname)}`;
+    return this.request<WorkerDomain[]>("GET", `/accounts/${accountId}/workers/domains?${query}`);
+  }
+
+  attachWorkerDomain(accountId: string, domain: { hostname: string; service: string; zone_id: string }): Promise<WorkerDomain> {
+    return this.request<WorkerDomain>("PUT", `/accounts/${accountId}/workers/domains`, domain);
+  }
+
+  async detachWorkerDomain(accountId: string, domainId: string): Promise<void> {
+    await this.send("DELETE", `/accounts/${accountId}/workers/domains/${domainId}`);
   }
 }

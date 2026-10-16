@@ -7,21 +7,32 @@ import {
   type UpdateLinkRequest,
 } from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Unlink } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AnalyticsHint, BarSeries, ESTIMATE_LABEL, TopList } from "@/components/analytics";
 import { EnableToggle, LinkBadges, SyncPendingNotice, useUpdateLink } from "@/components/link-status";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScreeningRefusal } from "@/components/screening-refusal";
 import { UtmBuilder } from "@/components/utm-builder";
 import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
+import { campaignListQuery } from "@/lib/campaigns";
 import { linkQuery } from "@/lib/links";
 import { analyticsMissing, browserTimeZone, linkStatsQuery } from "@/lib/stats";
 
@@ -77,6 +88,18 @@ function LinkDetails({ link }: { link: LinkResource }) {
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Destination</dt>
             <dd className="break-all">{link.destination}</dd>
+            {link.campaign === null || link.utm === null ? null : (
+              <>
+                <dt className="text-muted-foreground">Campaign</dt>
+                <dd>
+                  <Link to="/campaigns/$id" params={{ id: link.campaign.id }} className="hover:underline">
+                    {link.campaign.name}
+                  </Link>
+                </dd>
+                <dt className="text-muted-foreground">UTM</dt>
+                <dd>{[link.utm.source, link.utm.medium, link.utm.content, link.utm.term].filter(Boolean).join(" / ")}</dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Title</dt>
             <dd>{link.title ?? <span className="text-muted-foreground">None</span>}</dd>
             <dt className="text-muted-foreground">Lifetime total</dt>
@@ -89,10 +112,113 @@ function LinkDetails({ link }: { link: LinkResource }) {
             </Button>
             <EnableToggle link={link} />
           </div>
+          <Membership link={link} />
         </>
       )}
       <LinkAnalytics slug={link.slug} />
     </>
+  );
+}
+
+/**
+ * Campaign membership (ADR 0012): Detach for a campaign link, "Add to campaign…" (adopt) for a plain one, with the
+ * refusal reason when its destination does not match the chosen campaign.
+ */
+function Membership({ link }: { link: LinkResource }) {
+  const update = useUpdateLink(link.slug);
+  const [confirming, setConfirming] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const campaigns = useInfiniteQuery({ ...campaignListQuery(), enabled: link.campaign === null });
+  const options = campaigns.data?.pages.flatMap((page) => page.items) ?? [];
+
+  function detach() {
+    update.mutate(
+      { campaign: null },
+      {
+        onSuccess: () => {
+          setConfirming(false);
+          toast.success(`Detached /${link.slug}.`);
+        },
+        onError: () => toast.error(`Could not detach /${link.slug}. Try again.`),
+      },
+    );
+  }
+
+  function adopt(id: string) {
+    setRefusal(null);
+    update.mutate(
+      { campaign: { id } },
+      {
+        onSuccess: (adopted) => toast.success(`Added /${link.slug} to ${adopted.campaign?.name ?? "the campaign"}.`),
+        onError: (error) => {
+          const name = options.find((campaign) => campaign.id === id)?.name ?? "the campaign";
+          setRefusal(
+            error instanceof ApiError
+              ? `Cannot add /${link.slug} to ${name}: ${error.message}`
+              : "Could not add the link to the campaign. Try again.",
+          );
+        },
+      },
+    );
+  }
+
+  if (link.campaign !== null) {
+    const name = link.campaign.name;
+    return (
+      <section aria-label="Campaign" className="flex flex-wrap items-center gap-2 text-sm">
+        <p className="flex-1 text-muted-foreground">
+          In the campaign <span className="text-foreground">{name}</span>, which composes its destination.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+          <Unlink data-icon="inline-start" />
+          Detach
+        </Button>
+        <AlertDialog open={confirming} onOpenChange={setConfirming}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Detach /{link.slug} from {name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                It becomes a plain link: its destination and click history stay as they are, and its clicks no longer
+                count under the campaign.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction disabled={update.isPending} onClick={detach}>
+                Detach
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </section>
+    );
+  }
+
+  if (options.length === 0) return null;
+  return (
+    <section aria-label="Campaign" className="flex flex-col gap-2 text-sm">
+      <select
+        aria-label="Add to campaign"
+        value=""
+        disabled={update.isPending}
+        onChange={(event) => {
+          if (event.target.value !== "") adopt(event.target.value);
+        }}
+        className="h-8 w-fit rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+      >
+        <option value="">Add to campaign…</option>
+        {options.map((campaign) => (
+          <option key={campaign.id} value={campaign.id}>
+            {campaign.name}
+          </option>
+        ))}
+      </select>
+      {refusal === null ? null : (
+        <p role="alert" className="text-destructive">
+          {refusal}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -204,27 +330,40 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
   return (
     <form onSubmit={onSubmit} noValidate>
       <FieldGroup>
-        <Field data-invalid={errors.destination ? true : undefined}>
-          <FieldLabel htmlFor="destination">Destination</FieldLabel>
-          <Input
-            id="destination"
-            type="url"
-            inputMode="url"
-            autoFocus
-            aria-invalid={errors.destination ? true : undefined}
-            {...form.register("destination")}
-          />
-          <FieldError errors={[errors.destination]} />
-        </Field>
-        {refused !== null && refused.body.destination === destination && (
-          <ScreeningRefusal
-            host={refused.host}
-            action="Save anyway"
-            pending={update.isPending || isSubmitting}
-            onOverride={() => void send({ ...refused.body, screening: "skip" })}
-          />
+        {link.campaign !== null ? (
+          // No drift (ADR 0012): the campaign composes the destination, so it is shown, never edited, here.
+          <Field>
+            <FieldLabel>Destination</FieldLabel>
+            <p className="text-sm break-all">{link.destination}</p>
+            <FieldDescription>
+              Composed from the campaign {link.campaign.name}. Detach the link to edit its destination.
+            </FieldDescription>
+          </Field>
+        ) : (
+          <>
+            <Field data-invalid={errors.destination ? true : undefined}>
+              <FieldLabel htmlFor="destination">Destination</FieldLabel>
+              <Input
+                id="destination"
+                type="url"
+                inputMode="url"
+                autoFocus
+                aria-invalid={errors.destination ? true : undefined}
+                {...form.register("destination")}
+              />
+              <FieldError errors={[errors.destination]} />
+            </Field>
+            {refused !== null && refused.body.destination === destination && (
+              <ScreeningRefusal
+                host={refused.host}
+                action="Save anyway"
+                pending={update.isPending || isSubmitting}
+                onOverride={() => void send({ ...refused.body, screening: "skip" })}
+              />
+            )}
+            <UtmBuilder destination={destination} onCompose={composeDestination} />
+          </>
         )}
-        <UtmBuilder destination={destination} onCompose={composeDestination} />
         <Field data-invalid={errors.title ? true : undefined}>
           <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
           <Input id="title" aria-invalid={errors.title ? true : undefined} {...form.register("title")} />

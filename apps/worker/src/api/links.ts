@@ -10,13 +10,14 @@ import {
 } from "@furea/shared";
 import { Hono } from "hono";
 import { deleteCacheEntry } from "../core/cache.ts";
-import { deleteLink, getLink, insertLink, listLinks, updateLink } from "../core/db/links.ts";
+import { deleteLink, getLink, insertLink, listLinks, updateLink, type LinkRow } from "../core/db/links.ts";
 import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
 import { destinationFor } from "./destination.ts";
 import { apiError, notFound } from "./errors.ts";
 import { toLinkResource, toLinks } from "./link-resource.ts";
+import { adoptMismatch, planMembership, type MembershipChanges } from "./membership.ts";
 import { logScreening, screen } from "./screening.ts";
 import { requireCaller, requireWrite } from "./session.ts";
 import { jsonBody, queryParams } from "./validate.ts";
@@ -75,13 +76,16 @@ links.get("/:slug", requireCaller, async (c) => {
 // A merge-patch (ADR 0009). The cache entry is written even when nothing changed, so `PATCH {}` repairs it. A
 // destination is screened whenever it is present, even when its host is the link's current one (ADR 0013).
 links.patch("/:slug", requireWrite, jsonBody(updateLinkRequestFor), async (c) => {
-  const { destination, title, enabled, screening } = c.var.body;
+  const { destination, title, enabled, campaign, screening } = c.var.body;
   const slug = c.req.param("slug");
-  if (destination !== undefined) {
+  let membership: MembershipChanges = {};
+  if (destination !== undefined || campaign !== undefined) {
     const current = await getLink(c.env.DB, slug);
     if (current === null) return notFound();
-    // No drift (ADR 0012): a campaign link's destination is always composed from the campaign.
-    if (current.campaign_id !== null) {
+    // No drift (ADR 0012): a campaign link's destination is always composed from the campaign. Detaching in the
+    // same request frees it.
+    const ownedAfter = campaign === undefined ? current.campaign_id !== null : campaign !== null;
+    if (destination !== undefined && ownedAfter) {
       return apiError(400, "validation_failed", "The request is invalid.", {
         details: [
           {
@@ -92,11 +96,25 @@ links.patch("/:slug", requireWrite, jsonBody(updateLinkRequestFor), async (c) =>
         ],
       });
     }
+    if (campaign !== undefined) {
+      const planned = await planMembership(c.env.DB, current, campaign);
+      if (planned instanceof Response) return planned;
+      membership = planned;
+    }
   }
   const destinations = destination === undefined ? [] : [{ field: "destination", url: destination }];
   const screened = await screen(c.var.caller, destinations, screening);
   if (screened instanceof Response) return screened;
-  const row = await updateLink(c.env.DB, slug, { destination, title, enabled });
+  let row: LinkRow | null;
+  try {
+    row = await updateLink(c.env.DB, slug, { destination, title, enabled, ...membership });
+  } catch (err) {
+    // A concurrent write gave the campaign this UTM combination between the match and the update (ADR 0016).
+    if (membership.campaign && err instanceof Error && /UNIQUE/.test(err.message)) {
+      return adoptMismatch("utm_combination_taken");
+    }
+    throw err;
+  }
   if (row === null) return notFound();
   logScreening(screened, row.slug);
   return c.json(await toLinkResource(c.env.DB, await writeThrough(c.env.DB, c.env.KV, row), c.req.url));

@@ -22,9 +22,9 @@ Five tiers, named so that CI jobs, package scripts and this page use the same wo
 
 | Command | Tiers |
 |---|---|
-| `pnpm test` (root, via turbo) | Static checks that live in packages plus Unit |
+| `pnpm test` (root, via turbo) | Static checks that live in packages plus Unit, and `pnpm test:scripts` (the root `scripts/*.test.mjs` under `node --test`) |
 | `pnpm test:e2e` | E2E (starts `wrangler dev` itself) |
-| `pnpm test:compat` | Compat (needs network for `npm pack`) |
+| `pnpm test:compat` | Compat (needs network for `npm pack`; `--previous <tarball>` uses a tarball at hand, `--migrations <dir>` another migrations directory) |
 | `pnpm test:integration` | Integration; refuses to start unless `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set |
 
 In turbo, `test` does not depend on `^build` except in `packages/cli`, whose tests exercise the tarball assembly and therefore need `apps/worker` and `apps/admin` built first. `apps/worker`'s `test` depends on `apps/admin`'s `build` (not on `^build`): the dev-only `wrangler.jsonc` points the assets binding at `apps/admin/dist/assets`, which must exist for the Workers pool to start.
@@ -125,6 +125,8 @@ On `main` pushes the job reports only. In `release.yml` it runs **before `change
 6. On failure, print the failing migration file, a link to ADR 0006 and the reminder that column drops and renames take two releases.
 
 It runs in `ci.yml` only when the PR changes `apps/worker/migrations/` (path filter), and always in the release job.
+
+The skip is decided by npm itself: only an `E404` for `furea@latest` skips, so an unreachable registry fails the check instead of passing it (`scripts/check-expand-only.test.mjs` proves both against a local registry). The check's unit tests do not boot miniflare: the full run needs a built tarball and is exercised by `pnpm test:compat --previous <tarball>` after `pnpm --filter furea pack`.
 
 ## Considered and rejected
 

@@ -71,6 +71,7 @@ No component tests in v1: the screens were validated by the admin-UI prototype a
   3. Open the short URL and land on the destination (302) ([#43](https://github.com/sunwjy/furea/issues/43)).
   4. Edit the link, disable it and get the 404 ([#44](https://github.com/sunwjy/furea/issues/44)).
   5. Create an API key on the Security page, call the API with it alone, see it refused `POST /api-keys`, revoke it and get the 401 ([#45](https://github.com/sunwjy/furea/issues/45)).
+  6. See the link's lifetime total (the clicks of flow 3) on its feed card ([#48](https://github.com/sunwjy/furea/issues/48)).
   - Still to come: open the stats page and see the "estimates unavailable" state, with no analytics token ([#49](https://github.com/sunwjy/furea/issues/49)); create a campaign, add two links in the row editor, open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
 - The UTM builder's two-way sync is left to the `shared` golden vectors.
 - `globalSetup` prepares the local instance: `wrangler d1 migrations apply --local`, then inserts the operator password row with `wrangler d1 execute --local`, the hash computed in Node with the `shared` hashing function. Then it starts `wrangler dev` and waits for the port.

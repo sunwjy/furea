@@ -160,3 +160,11 @@ test("5. create an API key, call the API with it, and revoke it", async () => {
   expect(revoked.status()).toBe(401);
   await script.dispose();
 });
+
+test("6. see each link's lifetime total on its feed card", async () => {
+  // Flow 3 opened the short URL twice (once without following, once in the browser); the link has been disabled
+  // since flow 4 and keeps its total.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Links" }).click();
+  const card = page.getByRole("list", { name: "Links" }).getByRole("listitem").filter({ hasText: `/${SLUG}` });
+  await expect(card.getByText("2 clicks", { exact: true })).toBeVisible();
+});

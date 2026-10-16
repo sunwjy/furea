@@ -4,6 +4,7 @@
 import {
   ApiKey,
   ApiKeyList,
+  ChangePasswordRequest,
   CreateApiKeyRequest,
   CreatedApiKey,
   CreateLinkRequest,
@@ -17,8 +18,10 @@ import {
   LoginMethodResponse,
   LoginRequest,
   SessionResponse,
+  Settings,
   StatsQuery,
   UpdateLinkRequest,
+  UpdateSettingsRequest,
 } from "@furea/shared";
 import { z } from "zod";
 import { SESSION_COOKIE } from "./session.ts";
@@ -189,6 +192,32 @@ const OPERATIONS: Operation[] = [
   },
   {
     method: "get",
+    path: "/settings",
+    summary: "The instance settings: the root destination, Access mode and read-only instance facts.",
+    success: { status: 200, description: "The settings.", schema: "Settings" },
+    errors: [401],
+  },
+  {
+    method: "patch",
+    path: "/settings",
+    summary:
+      "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are " +
+      "read-only. An empty {} still rewrites the root destination's redirect cache entry.",
+    body: "UpdateSettingsRequest",
+    success: { status: 200, description: "The settings after the edit.", schema: "Settings" },
+    errors: [...BODY_ERRORS, 401, 403],
+  },
+  {
+    method: "post",
+    path: "/password",
+    summary: "Change the operator password after re-entering the current one; ends every session. Session only.",
+    sessionOnly: true,
+    body: "ChangePasswordRequest",
+    success: { status: 204, description: "Changed; every session is ended and this one's cookie cleared." },
+    errors: [...BODY_ERRORS, 401, 403],
+  },
+  {
+    method: "get",
     path: "/links/{slug}/stats",
     summary:
       "A link's click breakdowns for the range: series (hourly for 24h, daily otherwise, zero-filled), top 10 " +
@@ -249,7 +278,14 @@ export function buildOpenApiDocument(version: string): JsonSchema {
         apiKey: { type: "http", scheme: "bearer", description: "An API key, furea_…; read or write scope." },
       },
       schemas: {
-        ...components("input", { CreateApiKeyRequest, CreateLinkRequest, LoginRequest, UpdateLinkRequest }),
+        ...components("input", {
+          ChangePasswordRequest,
+          CreateApiKeyRequest,
+          CreateLinkRequest,
+          LoginRequest,
+          UpdateLinkRequest,
+          UpdateSettingsRequest,
+        }),
         ...components("output", {
           ApiKey,
           ApiKeyList,
@@ -262,6 +298,7 @@ export function buildOpenApiDocument(version: string): JsonSchema {
           LinkStats,
           LoginMethodResponse,
           SessionResponse,
+          Settings,
         }),
       },
       responses: {

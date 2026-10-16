@@ -136,6 +136,12 @@ importers:
 
   packages/cli:
     devDependencies:
+      '@furea/admin':
+        specifier: workspace:*
+        version: link:../../apps/admin
+      '@furea/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -145,6 +151,9 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.4)(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0))
 
   packages/shared:
     dependencies:

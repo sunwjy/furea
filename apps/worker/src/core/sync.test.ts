@@ -1,23 +1,23 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { getLink, insertLink, markSyncPending, updateLink } from "./db/links.ts";
-import { repairSyncPending, writeThrough } from "./sync.ts";
+import { isRootSyncPending, markRootSyncPending, setRootDestination } from "./db/settings.ts";
+import { repairSyncPending, writeRootThrough, writeThrough } from "./sync.ts";
 
 /**
- * The real KV binding, except that `put` fails for chosen keys: `Infinity` times, or the first n attempts
+ * The real KV binding, except that `put` and `delete` fail for chosen keys: `Infinity` times, or the first n attempts
  * (docs/testing.md: fault injection is the one allowed wrapper; a fake store is not).
  */
 function failingPuts(failures: Record<string, number>): { kv: KVNamespace; attempts: Map<string, number> } {
   const attempts = new Map<string, number>();
   const kv = new Proxy(env.KV, {
     get(target, property) {
-      if (property === "put") {
-        return (...args: Parameters<KVNamespace["put"]>) => {
-          const [key] = args;
+      if (property === "put" || property === "delete") {
+        return (key: string, ...rest: unknown[]) => {
           const attempt = (attempts.get(key) ?? 0) + 1;
           attempts.set(key, attempt);
           if (attempt <= (failures[key] ?? 0)) return Promise.reject(new Error("injected KV failure"));
-          return target.put(...args);
+          return (target[property] as (key: string, ...rest: unknown[]) => Promise<void>)(key, ...rest);
         };
       }
       const value = Reflect.get(target, property, target) as unknown;
@@ -39,6 +39,7 @@ beforeEach(async () => {
   warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
   // Each test starts with nothing pending, so a repair pass only sees the links the test made pending.
   await env.DB.exec("UPDATE links SET cache_synced = 1");
+  await env.DB.exec("DELETE FROM settings WHERE key IN ('root_destination', 'root_destination_sync_pending')");
 });
 
 afterEach(() => {
@@ -106,6 +107,49 @@ describe("writeThrough", () => {
   });
 });
 
+describe("writeRootThrough", () => {
+  it("writes the root destination from D1 under the reserved key", async () => {
+    await setRootDestination(env.DB, "https://example.com/home");
+
+    expect(await writeRootThrough(env.DB, env.KV, NO_DELAY)).toBe(true);
+
+    expect(await env.KV.get("_", "json")).toEqual({ to: "https://example.com/home", disabled: false });
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it("deletes the reserved key once the root destination is unset", async () => {
+    await env.KV.put("_", JSON.stringify({ to: "https://example.com/old", disabled: false }));
+    await setRootDestination(env.DB, null);
+
+    expect(await writeRootThrough(env.DB, env.KV, NO_DELAY)).toBe(true);
+
+    expect(await env.KV.get("_")).toBeNull();
+  });
+
+  it.each([
+    ["a write", "https://example.com/home"],
+    ["an unset", null],
+  ])("gives up on %s after three attempts, marks the root sync pending and logs cache_sync_failed", async (_, value) => {
+    await setRootDestination(env.DB, value);
+    const { kv, attempts } = failingPuts({ _: Infinity });
+
+    expect(await writeRootThrough(env.DB, kv, NO_DELAY)).toBe(false);
+
+    expect(attempts.get("_")).toBe(3);
+    expect(await isRootSyncPending(env.DB)).toBe(true);
+    expect(logged(errors)).toEqual([{ event: "cache_sync_failed", slug: "_" }]);
+  });
+
+  it("clears sync pending once a later write reaches the cache", async () => {
+    await setRootDestination(env.DB, "https://example.com/home");
+    await markRootSyncPending(env.DB);
+
+    expect(await writeRootThrough(env.DB, env.KV, NO_DELAY)).toBe(true);
+
+    expect(await isRootSyncPending(env.DB)).toBe(false);
+  });
+});
+
 describe("repairSyncPending", () => {
   it("rewrites every pending link's entry, clears the state and logs the counts", async () => {
     await link("Rp-1");
@@ -134,6 +178,16 @@ describe("repairSyncPending", () => {
 
     expect(await repairSyncPending(env.DB, env.KV, { ...NO_DELAY, limit: 2 })).toEqual({ repaired: 2, failed: 0 });
     expect((await getLink(env.DB, "Rl-3"))?.cache_synced).toBe(0);
+  });
+
+  it("repairs a sync-pending root destination alongside the links", async () => {
+    await setRootDestination(env.DB, "https://example.com/home");
+    await markRootSyncPending(env.DB);
+
+    expect(await repairSyncPending(env.DB, env.KV, NO_DELAY)).toEqual({ repaired: 1, failed: 0 });
+
+    expect(await env.KV.get("_", "json")).toEqual({ to: "https://example.com/home", disabled: false });
+    expect(await isRootSyncPending(env.DB)).toBe(false);
   });
 
   it("logs nothing when there is nothing to repair", async () => {

@@ -26,6 +26,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm exec turbo run build typecheck
+      - run: node scripts/check-tarball.mjs
 
   unit:
     name: Unit

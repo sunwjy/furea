@@ -72,7 +72,8 @@ No component tests in v1: the screens were validated by the admin-UI prototype a
   4. Edit the link, disable it and get the 404 ([#44](https://github.com/sunwjy/furea/issues/44)).
   5. Create an API key on the Security page, call the API with it alone, see it refused `POST /api-keys`, revoke it and get the 401 ([#45](https://github.com/sunwjy/furea/issues/45)).
   6. See the link's lifetime total (the clicks of flow 3) on its feed card ([#48](https://github.com/sunwjy/furea/issues/48)).
-  7. Open the stats page and see the "estimates unavailable" state, with no analytics token ([#49](https://github.com/sunwjy/furea/issues/49)).
+  7. Set a root destination on the Settings page, get the 302 from `/`, unset it and get the 404 ([#46](https://github.com/sunwjy/furea/issues/46)).
+  8. Open the stats page and see the "estimates unavailable" state, with no analytics token ([#49](https://github.com/sunwjy/furea/issues/49)).
   - Still to come: create a campaign, add two links in the row editor, open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
 - The UTM builder's two-way sync is left to the `shared` golden vectors.
 - `globalSetup` prepares the local instance: `wrangler d1 migrations apply --local`, then inserts the operator password row with `wrangler d1 execute --local`, the hash computed in Node with the `shared` hashing function. Then it starts `wrangler dev` and waits for the port.
@@ -85,6 +86,8 @@ No component tests in v1: the screens were validated by the admin-UI prototype a
 The REST client takes `fetch` as a constructor argument; tests pass a replaying `fetch` and no network library is involved (the published CLI has zero runtime dependencies, ADR 0007).
 
 - Fixtures are **recorded, not hand-written**: `FUREA_RECORD_FIXTURES=1 pnpm test:integration` runs the real flow and writes ordered request/response pairs to `packages/cli/test/fixtures/<scenario>.json`, replacing the account id, token, resource ids and hostnames with fixed placeholders. Re-record when the Cloudflare API changes shape; the diff shows what changed.
+  - The harness is `packages/cli/test/fixtures.ts`: a test calls `useFixture(scenario)` and gets a `fetch`, a token and an account id. Replaying, they are the fixture and its placeholders (`TOKEN` or `cfat_TOKEN`, `ACCOUNT_ID`, `ID_n`, `host-n.example.com`, `operator@example.com`); replay fails on any request the recording does not have, and `done()` fails if a recorded request was not made. With `FUREA_RECORD_FIXTURES=1` the same test runs against the real API with the token and account id from the environment (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, or the variable the scenario names) and rewrites the file, so `FUREA_RECORD_FIXTURES=1 CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… pnpm --filter furea test` re-records the unit scenarios too.
+  - A scenario that a real account cannot produce on demand (the verify fallback after a `401`, a token that sees several accounts) is marked `replayOnly` and keeps its hand-made fixture.
 - Scenarios, at minimum: **fresh install** on an empty account; **upgrade** of an existing instance with one pending migration (exercises the version gate, `keep_bindings`, migration listing); **resume** after an expired asset upload session (ADR 0006 failure recovery).
 - These tests cover the find-or-create logic, the `create` / `reuse` / `skip` output lines, error mapping (a rejected binding is a hard error) and the tarball assembly (which is why `cli`'s `test` depends on `build`).
 

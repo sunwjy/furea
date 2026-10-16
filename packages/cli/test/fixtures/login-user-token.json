@@ -1,0 +1,22 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "result": { "id": "ID_1", "status": "active" },
+          "success": true,
+          "errors": [],
+          "messages": [{ "code": 10000, "message": "This API Token is valid and active", "type": null }]
+        }
+      }
+    }
+  ]
+}

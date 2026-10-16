@@ -1,0 +1,38 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 401,
+        "body": {
+          "success": false,
+          "errors": [{ "code": 1000, "message": "Invalid API Token" }],
+          "messages": [],
+          "result": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 401,
+        "body": {
+          "success": false,
+          "errors": [{ "code": 1000, "message": "Invalid API Token" }],
+          "messages": [],
+          "result": null
+        }
+      }
+    }
+  ]
+}

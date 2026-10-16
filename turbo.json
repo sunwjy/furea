@@ -22,6 +22,20 @@
         "build"
       ],
       "cache": false
+    },
+    "furea#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        "migrations/**"
+      ]
+    },
+    "furea#test": {
+      "dependsOn": [
+        "build"
+      ]
     }
   }
 }

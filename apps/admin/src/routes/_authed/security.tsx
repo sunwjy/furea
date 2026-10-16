@@ -1,7 +1,15 @@
-import { ApiKeyName, Scope, type ApiKey, type CreatedApiKey } from "@furea/shared";
+import {
+  ApiKeyName,
+  ChangePasswordRequest,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  Scope,
+  type ApiKey,
+  type CreatedApiKey,
+} from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Copy, KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -24,6 +32,7 @@ import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from
 import { Input } from "@/components/ui/input";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { apiKeysQuery, createApiKey, revokeApiKey } from "@/lib/api-keys";
+import { changePassword } from "@/lib/settings";
 
 export const Route = createFileRoute("/_authed/security")({
   component: SecurityPage,
@@ -37,6 +46,7 @@ function SecurityPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <h1 className="font-heading text-xl font-semibold">Security</h1>
+      <PasswordSection />
       <section aria-labelledby="api-keys-heading" className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h2 id="api-keys-heading" className="font-heading font-semibold">
@@ -66,6 +76,100 @@ function SecurityPage() {
       </section>
       <RevealedKeyDialog apiKey={revealed} onClose={() => setRevealed(null)} />
     </div>
+  );
+}
+
+const PasswordForm = ChangePasswordRequest.extend({ confirmPassword: z.string() }).refine(
+  ({ newPassword, confirmPassword }) => newPassword === confirmPassword,
+  { path: ["confirmPassword"], message: "The two new passwords differ." },
+);
+type PasswordValues = z.infer<typeof PasswordForm>;
+
+const PASSWORD_FIELDS = ["currentPassword", "newPassword"] as const;
+
+function PasswordSection() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const form = useForm<PasswordValues>({
+    resolver: zodResolver(PasswordForm),
+    defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
+  });
+  const { errors, isSubmitting } = form.formState;
+
+  // Changing the password ends every session, this one included (ADR 0003), so success leads to the login page.
+  const onSubmit = form.handleSubmit(async ({ currentPassword, newPassword }) => {
+    try {
+      await changePassword({ currentPassword, newPassword });
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "invalid_password") {
+        form.setError("currentPassword", { message: "The current password is not correct." });
+        return;
+      }
+      const fieldErrors = fieldDetails(error, PASSWORD_FIELDS);
+      if (fieldErrors.length === 0) {
+        toast.error(error instanceof ApiError ? error.message : "Could not change the password. Try again.");
+        return;
+      }
+      for (const detail of fieldErrors) form.setError(detail.field, { message: detail.message });
+      return;
+    }
+    queryClient.clear();
+    toast.success("Password changed. Every session was logged out; log in with the new password.");
+    await navigate({ to: "/login" });
+  });
+
+  return (
+    <section aria-labelledby="password-heading" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="password-heading" className="font-heading font-semibold">
+          Password
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {PASSWORD_MIN_LENGTH} to {PASSWORD_MAX_LENGTH} characters, no other rules. Changing it logs out every session,
+          this one included.
+        </p>
+      </div>
+      <form onSubmit={onSubmit} noValidate>
+        <FieldGroup>
+          <Field data-invalid={errors.currentPassword ? true : undefined}>
+            <FieldLabel htmlFor="current-password">Current password</FieldLabel>
+            <Input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              aria-invalid={errors.currentPassword ? true : undefined}
+              {...form.register("currentPassword")}
+            />
+            <FieldError errors={[errors.currentPassword]} />
+          </Field>
+          <Field data-invalid={errors.newPassword ? true : undefined}>
+            <FieldLabel htmlFor="new-password">New password</FieldLabel>
+            <Input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={errors.newPassword ? true : undefined}
+              {...form.register("newPassword")}
+            />
+            <FieldError errors={[errors.newPassword]} />
+          </Field>
+          <Field data-invalid={errors.confirmPassword ? true : undefined}>
+            <FieldLabel htmlFor="confirm-password">New password again</FieldLabel>
+            <Input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={errors.confirmPassword ? true : undefined}
+              {...form.register("confirmPassword")}
+            />
+            <FieldError errors={[errors.confirmPassword]} />
+          </Field>
+          <Button type="submit" className="self-start" disabled={isSubmitting}>
+            {isSubmitting ? "Changing…" : "Change password"}
+          </Button>
+        </FieldGroup>
+      </form>
+    </section>
   );
 }
 

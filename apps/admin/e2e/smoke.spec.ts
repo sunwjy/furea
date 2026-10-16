@@ -169,7 +169,33 @@ test("6. see each link's lifetime total on its feed card", async () => {
   await expect(card.getByText("2 clicks", { exact: true })).toBeVisible();
 });
 
-test("7. open the stats page and see the estimates unavailable state, with no analytics token", async () => {
+test("7. set a root destination on the Settings page, land on it from /, and unset it", async () => {
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByText("npx furea@latest deploy")).toBeVisible();
+  await expect(page.getByText("Not configured")).toBeVisible();
+
+  const rootDestination = `http://127.0.0.1:${PORT}/robots.txt?from=root`;
+  const field = page.getByLabel("Where the bare hostname redirects");
+  await field.fill(rootDestination);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Root destination saved.")).toBeVisible();
+
+  const res = await page.request.get("/", { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
+  expect(res.headers()["location"]).toBe(rootDestination);
+  expect(res.headers()["cache-control"]).toBe("no-store");
+
+  // Empty unsets it: / is the unknown-slug response again.
+  await field.fill("");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Root destination removed.")).toBeVisible();
+  const unset = await page.request.get("/", { maxRedirects: 0 });
+  expect(unset.status()).toBe(404);
+  expect(await unset.text()).toBe(await (await page.request.get("/no-such-link")).text());
+});
+
+test("8. open the stats page and see the estimates unavailable state, with no analytics token", async () => {
   // The local instance has the CLICKS binding but no ANALYTICS_TOKEN secret.
   const res = await page.request.get("/api/v1/stats?range=7d&tz=Asia/Seoul");
   expect(res.status()).toBe(503);

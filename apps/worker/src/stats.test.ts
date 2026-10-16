@@ -229,6 +229,18 @@ describe("GET /api/v1/stats", () => {
   });
 });
 
+describe("GET /api/v1/settings", () => {
+  it.each([
+    ["configured", [], true, []],
+    ["without the token", ["ANALYTICS_TOKEN"], false, ["token"]],
+    ["without the binding", ["CLICKS"], false, ["binding"]],
+    ["without either", ["CLICKS", "ANALYTICS_TOKEN"], false, ["binding", "token"]],
+  ] as const)("tells the admin surface %s whether breakdowns work and what is missing", async (_, drop, configured, missing) => {
+    const res = await get("/settings", { drop: [...drop] });
+    expect(await res.json()).toMatchObject({ analyticsConfigured: configured, analyticsMissing: missing });
+  });
+});
+
 describe("without breakdowns configured", () => {
   for (const path of ["/stats", "/links/whatever/stats"]) {
     it(`GET ${path} answers 503 analytics_unavailable naming the missing token`, async () => {

@@ -58,6 +58,12 @@ export interface Binding {
   [key: string]: unknown;
 }
 
+export interface ScriptSettings {
+  bindings: Binding[];
+  observability?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface D1Result<Row = Record<string, unknown>> {
   success: boolean;
   results: Row[];
@@ -202,9 +208,14 @@ export class CloudflareClient {
 
   /** The deployed script's bindings, or undefined when there is no script of that name. */
   async getScriptBindings(accountId: string, script: string): Promise<Binding[] | undefined> {
+    return (await this.getScriptSettings(accountId, script))?.bindings;
+  }
+
+  /** The deployed script's settings (bindings, observability), or undefined when there is no script of that name. */
+  async getScriptSettings(accountId: string, script: string): Promise<ScriptSettings | undefined> {
     try {
-      const settings = await this.request<{ bindings?: Binding[] }>("GET", `/accounts/${accountId}/workers/scripts/${script}/settings`);
-      return settings.bindings ?? [];
+      const settings = await this.request<Partial<ScriptSettings>>("GET", `/accounts/${accountId}/workers/scripts/${script}/settings`);
+      return { ...settings, bindings: settings.bindings ?? [] };
     } catch (error) {
       if (isNotFound(error)) return undefined;
       throw error;

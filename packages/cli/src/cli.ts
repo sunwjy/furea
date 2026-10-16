@@ -9,6 +9,7 @@ import { destroy } from "./commands/destroy.ts";
 import { deploy } from "./commands/deploy.ts";
 import { domainSet, domainUnset } from "./commands/domain.ts";
 import { login, logout } from "./commands/login.ts";
+import { status } from "./commands/status.ts";
 import { logs } from "./commands/logs.ts";
 import { resetPassword } from "./commands/reset-password.ts";
 import type { CommandContext } from "./context.ts";
@@ -25,6 +26,8 @@ export interface CliDeps {
   io: Io;
   /** The package `deploy` installs; this package unless a test substitutes a fixed one. */
   installer?: Installer;
+  /** The npm registry lookup of the update check; `fetch` unless a test separates it from the Cloudflare API. */
+  registryFetch?: typeof fetch;
   /** Opens the tail's `trace-v1` WebSocket for `logs`; Node's WebSocket unless a test drives the sockets. */
   tail?: TailTransport;
   /** Renews the tail at `expires_at`; real timers unless a test fires them. */
@@ -53,7 +56,8 @@ const USAGE = `Usage: furea [command] [--name <instance>] [--account <account id
 
 Commands:
   deploy (default)   Install or upgrade an instance (--hostname <hostname> | --workers-dev,
-                     --workers-subdomain <name>, --allow-downgrade)
+                     --workers-subdomain <name>, --allow-downgrade, --no-update-check)
+  status             Report the instance and any drift; exit 1 when something is wrong (--no-update-check)
   login              Store a deploy token (--account-token opens the account-owned token form)
   logout             Remove a stored deploy token
   logs               Stream live events, without storing anything (--errors, --json)
@@ -63,8 +67,7 @@ Commands:
   reset-password     Replace the operator password and sign out every session
   access enable      Turn Cloudflare Access mode on (--team-domain <team>.cloudflareaccess.com, --aud <tag>); own domain only
   access disable     Turn Cloudflare Access mode off
-  destroy            Delete the instance (--confirm <name> without a terminal, --keep-database)
-  status`;
+  destroy            Delete the instance (--confirm <name> without a terminal, --keep-database)`;
 
 /** Runs one CLI invocation and returns its exit code. */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
@@ -82,6 +85,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         "workers-dev": { type: "boolean", default: false },
         "workers-subdomain": { type: "string" },
         "allow-downgrade": { type: "boolean", default: false },
+        "no-update-check": { type: "boolean", default: false },
         errors: { type: "boolean", default: false },
         json: { type: "boolean", default: false },
         "team-domain": { type: "string" },
@@ -124,8 +128,16 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
             workersSubdomain: values["workers-subdomain"],
           },
           allowDowngrade: values["allow-downgrade"],
+          registryFetch: deps.registryFetch ?? deps.fetch,
+          noUpdateCheck: values["no-update-check"],
         });
         return 0;
+      case "status":
+        return await status(ctx, {
+          installer: deps.installer ?? ownInstaller(),
+          registryFetch: deps.registryFetch ?? deps.fetch,
+          noUpdateCheck: values["no-update-check"],
+        });
       case "login":
         await login(ctx, { accountToken: values["account-token"] });
         return 0;

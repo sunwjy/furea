@@ -17,6 +17,7 @@ import { ANALYTICS_ENGINE_DOCS } from "../links.ts";
 import { HOSTNAME_CHOICE_FLAGS, type HostnameChoice, resolveHostname } from "../hostname.ts";
 import { applyMigrations } from "../migrations.ts";
 import type { Installer } from "../package-files.ts";
+import { deployUpdateLine, latestRelease } from "../update-check.ts";
 import { isNewer } from "../version.ts";
 import { pasteAnalyticsToken, storeAnalyticsToken } from "./analytics-token.ts";
 import { login } from "./login.ts";
@@ -26,6 +27,10 @@ export interface DeployOptions {
   /** `--hostname` / `--workers-dev` / `--workers-subdomain`: the first-run hostname choice (ADR 0006 step 8). */
   hostname: HostnameChoice;
   allowDowngrade: boolean;
+  /** For the update check's registry lookup only; the Cloudflare API goes through `ctx.fetch`. */
+  registryFetch: typeof fetch;
+  /** `--no-update-check`. */
+  noUpdateCheck: boolean;
 }
 
 /** ADR 0011: declared on every upload, so the state never rests on Cloudflare's defaults or a dashboard edit. */
@@ -160,6 +165,11 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
   if (firstInstall) await offerAnalyticsToken(ctx, client, accountId, clicks);
 
   io.out(`Ready: ${url}/admin/`);
+
+  // A newer release than the one just deployed: a stale npx cache or a pinned CI installer (ADR 0006 *Update check*).
+  const latest = await latestRelease({ fetch: options.registryFetch, env: ctx.env, skip: options.noUpdateCheck });
+  const hint = deployUpdateLine(installer.version, latest);
+  if (hint) io.out(hint);
 }
 
 /** Stored or environment credentials; on a first run at a terminal with none, the login flow. */

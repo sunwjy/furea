@@ -175,6 +175,7 @@ describe("GET /api/v1/stats", () => {
 
   it("returns the tiles, the top links and a zero-filled series per slug from one GROUP BY index1, bucket", async () => {
     const api = sqlApi([
+      [/index1 = 'reused'/, [{ slug: "reused", bucket: "2026-10-14 00:00:00", clicks: 2 }]],
       [/GROUP BY slug, bucket/, [
         { slug: "alpha", bucket: "2026-10-15 00:00:00", clicks: 3 },
         { slug: "alpha", bucket: "2026-10-16 00:00:00", clicks: 1 },
@@ -212,7 +213,49 @@ describe("GET /api/v1/stats", () => {
     expect(tiles).toContain("sumIf(_sample_interval, timestamp >= toDateTime('2026-10-15 15:00:00')) AS today");
     expect(tiles).toContain("sumIf(_sample_interval, timestamp >= toDateTime('2026-10-09 15:00:00')) AS last7d");
     expect(tiles).toContain("timestamp >= toDateTime('2026-09-16 15:00:00')");
-    expect(api.statements).toHaveLength(2);
+    expect(api.statements).toHaveLength(3);
+  });
+
+  it("counts a link created inside the range from its created_at, even within the bucket it was created in", async () => {
+    // "reused" was created at 05:00 on 14 October (Seoul); the 14 October bucket also holds the deleted link's clicks.
+    const api = sqlApi([
+      [/index1 = 'reused'/, [{ slug: "reused", bucket: "2026-10-14 00:00:00", clicks: 2 }]],
+      [/GROUP BY slug, bucket/, [
+        { slug: "alpha", bucket: "2026-10-15 00:00:00", clicks: 3 },
+        { slug: "reused", bucket: "2026-10-11 00:00:00", clicks: 50 },
+        { slug: "reused", bucket: "2026-10-14 00:00:00", clicks: 7 },
+      ]],
+    ]);
+
+    const body = InstanceStats.parse(await (await get("/stats?range=7d&tz=Asia/Seoul", { fetch: api.fetch })).json());
+
+    const week = (values: Record<number, number>) => SEOUL_WEEK.map((start, i) => ({ start, clicks: values[i] ?? 0 }));
+    expect(body.seriesBySlug).toEqual({ alpha: week({ 5: 3 }), reused: week({ 4: 2 }) });
+    expect(body.topLinks).toEqual([
+      { slug: "alpha", clicks: 3 },
+      { slug: "reused", clicks: 2 },
+    ]);
+    const bounded = api.statements.filter((sql) => sql.includes("index1 = "));
+    expect(bounded).toHaveLength(1);
+    expect(bounded[0]).toContain("(index1 = 'reused' AND timestamp >= toDateTime('2026-10-13 20:00:00'))");
+    expect(bounded[0]).not.toContain("'alpha'");
+  });
+
+  it("reads links created inside the range again at most 50 bounds per query, each under 9,000 characters", async () => {
+    const slugs = Array.from({ length: 51 }, (_, i) => `${String(i).padStart(2, "0")}-${"x".repeat(61)}`);
+    for (const slug of slugs) {
+      await insertLink(env.DB, { slug, destination: "https://example.com/n", now: new Date("2026-10-15T01:02:03Z") });
+    }
+    const api = sqlApi([[/GROUP BY slug, bucket/, slugs.map((slug) => ({ slug, bucket: "2026-10-16 00:00:00", clicks: 1 }))]]);
+
+    const body = InstanceStats.parse(
+      await (await get("/stats?range=7d&tz=America/Argentina/ComodRivadavia", { fetch: api.fetch })).json(),
+    );
+
+    const bounded = api.statements.filter((sql) => sql.includes("index1 = "));
+    expect(bounded.map((sql) => sql.split("index1 = ").length - 1)).toEqual([50, 1]);
+    for (const sql of bounded) expect(sql.length).toBeLessThanOrEqual(9000);
+    expect(Object.keys(body.seriesBySlug)).toHaveLength(51);
   });
 
   it("keeps the ten busiest links only", async () => {

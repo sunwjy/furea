@@ -78,10 +78,14 @@ export async function linkStats(
   };
 }
 
+/** At most this many `(index1, created_at)` bounds per query: ADR 0005's worst case for the SQL length limit. */
+export const BOUNDS_PER_QUERY = 50;
+
 /**
  * The instance overview: the today / 7 d / 30 d tiles over every click, and from one `GROUP BY index1, bucket` query
- * the top links and a series per existing link. Slugs that no longer exist are left out, and a slug's buckets from
- * before its link was created count 0, since that query cannot carry a bound per link.
+ * the top links and a series per existing link. Slugs that no longer exist are left out. That query cannot carry a
+ * bound per link, so the links created inside the range (where a reused slug could inherit a deleted link's clicks,
+ * ADR 0002) are read again with `index1 = <slug> AND timestamp >= <created_at>`, at most 50 bounds per query.
  */
 export async function instanceStats(
   client: SqlClient,
@@ -112,13 +116,33 @@ export async function instanceStats(
     bySlug.set(slug, [...(bySlug.get(slug) ?? []), row]);
   }
   const created = await createdAtOf(db, [...bySlug.keys()]);
+  const rangeStartMs = buckets[0]?.startMs ?? now.getTime();
+  const recent = [...created].filter(([, createdAt]) => Date.parse(createdAt) > rangeStartMs);
+  const recentSlugs = new Set(recent.map(([slug]) => slug));
+  for (const slug of recentSlugs) bySlug.set(slug, []);
+  const bounded = await Promise.all(
+    chunks(recent, BOUNDS_PER_QUERY).map((chunk) => {
+      const bounds = chunk
+        .map(([slug, createdAt]) => `(index1 = ${sqlString(slug)} AND timestamp >= ${sqlDateTime(Date.parse(createdAt))})`)
+        .join("\n   OR ");
+      return client.query(
+        `SELECT index1 AS slug, ${bucketColumn(range, tz)}, sum(_sample_interval) AS clicks\nFROM ${DATASET}\n` +
+          `WHERE (${bounds})\n  AND timestamp >= ${sqlDateTime(rangeStartMs)}\n` +
+          "GROUP BY slug, bucket\nORDER BY slug, bucket\nFORMAT JSON",
+      );
+    }),
+  );
+  for (const row of bounded.flat()) {
+    const slug = String(row["slug"]);
+    if (recentSlugs.has(slug)) bySlug.get(slug)?.push(row);
+  }
 
   const seriesBySlug: Record<string, SeriesPoint[]> = {};
   const totals: { slug: string; clicks: number }[] = [];
   for (const [slug, slugRows] of bySlug) {
     const createdAt = created.get(slug);
     if (createdAt === undefined) continue;
-    const series = zeroFilled(buckets, slugRows, Date.parse(createdAt));
+    const series = zeroFilled(buckets, slugRows);
     const clicks = series.reduce((sum, point) => sum + point.clicks, 0);
     if (clicks === 0) continue;
     seriesBySlug[slug] = series;
@@ -137,4 +161,10 @@ export async function instanceStats(
     topLinks: totals.slice(0, TOP),
     seriesBySlug,
   };
+}
+
+function chunks<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }

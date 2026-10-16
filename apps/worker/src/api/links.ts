@@ -3,6 +3,7 @@
 
 import {
   campaignUtmKey,
+  composeCampaignLink,
   CreateLinkRequest,
   generateSlug,
   ListLinksQuery,
@@ -13,14 +14,13 @@ import {
 } from "@furea/shared";
 import { Hono } from "hono";
 import { deleteCacheEntry } from "../core/cache.ts";
-import { campaignUtmKeys, getCampaign } from "../core/db/campaigns.ts";
+import { campaignUtmKeys, getCampaign, utmPartsOf } from "../core/db/campaigns.ts";
 import { deleteLink, getLink, insertLink, listLinks, updateLink, type LinkRow } from "../core/db/links.ts";
-import { composeCampaignLink } from "./campaigns.ts";
 import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
-import { destinationFor } from "./destination.ts";
-import { apiError, notFound } from "./errors.ts";
+import { composedTooLong, destinationFor } from "./destination.ts";
+import { apiError, notFound, validationFailed } from "./errors.ts";
 import { toLinkResource, toLinks, utmOf } from "./link-resource.ts";
 import { adoptMismatch, planMembership, type MembershipChanges } from "./membership.ts";
 import { logScreening, screen } from "./screening.ts";
@@ -108,14 +108,14 @@ links.patch("/:slug", requireWrite, jsonBody(updateLinkRequestFor), async (c) =>
         message: "Only a campaign link has its own UTM values; edit a plain link's destination instead.",
       });
     }
-    if (details.length > 0) return apiError(400, "validation_failed", "The request is invalid.", { details });
+    if (details.length > 0) return validationFailed(details);
     if (campaign !== undefined) {
       const planned = await planMembership(c.env.DB, current, campaign);
       if (planned instanceof Response) return planned;
       membership = planned;
     }
     if (utm !== undefined && current.campaign_id !== null) {
-      const own = await recompose(c.env.DB, current, current.campaign_id, utm, new URL(c.req.url));
+      const own = await recompose(c.env.DB, current, current.campaign_id, utm);
       if (own instanceof Response) return own;
       recomposed = own;
     }
@@ -159,7 +159,6 @@ async function recompose(
   current: LinkRow,
   campaignId: string,
   patch: CampaignLinkUtmPatch,
-  requestUrl: URL,
 ): Promise<Response | { destination: string; campaignUtmKey: string }> {
   const campaign = await getCampaign(db, campaignId);
   if (campaign === null) throw new Error("a campaign link's campaign vanished");
@@ -170,14 +169,9 @@ async function recompose(
     content: patch.content === undefined ? stored.content : patch.content,
     term: patch.term === undefined ? stored.term : patch.term,
   };
-  const composed = composeCampaignLink(campaign, own);
-  if (!destinationFor(requestUrl).safeParse(composed).success) {
-    return apiError(400, "validation_failed", "The request is invalid.", {
-      details: [
-        { field: "utm", code: "destination_invalid", message: "The composed destination would be longer than 2048 characters." },
-      ],
-    });
-  }
+  const composed = composeCampaignLink(utmPartsOf(campaign), own);
+  const tooLong = composedTooLong(composed, "utm", current.slug);
+  if (tooLong !== null) return validationFailed([tooLong]);
   const key = campaignUtmKey(own);
   const holder = (await campaignUtmKeys(db, campaign.id)).get(key);
   if (holder !== undefined && holder !== current.slug) {

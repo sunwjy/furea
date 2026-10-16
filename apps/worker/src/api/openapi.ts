@@ -273,7 +273,7 @@ const OPERATIONS: Operation[] = [
     summary:
       "Create links in the campaign, all or nothing; the only way to create a campaign link. Each destination is " +
       "composed from the campaign and the item's utm. Every failing item is reported in one 400 " +
-      "validation_failed (slug_taken, utm_combination_taken with conflictsWith, destination_invalid); 409 " +
+      "validation_failed (slug_taken, utm_combination_taken with conflictsWith, rewrite_too_long); 409 " +
       "campaign_link_limit past 50 links; the base URL's host is screened once (422 destination_flagged).",
     parameters: [CAMPAIGN_ID_PARAMETER],
     body: "BulkCreateCampaignLinksRequest",

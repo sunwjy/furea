@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Destination, DESTINATION_MAX_LENGTH } from "./api/links.ts";
-import { composeUtm, hasUtmKey, missingUtmCore, parseUtm, type UtmValues, type UtmWarning } from "./utm.ts";
+import { composeCampaignLink, composeUtm, hasUtmKey, missingUtmCore, parseUtm, type UtmValues, type UtmWarning } from "./utm.ts";
 
 // The golden vectors of ADR 0014 (docs/testing.md): the Worker's campaign rewrite and the admin builder agree on them.
 const SPRING: UtmValues = { utm_source: "news letter", utm_medium: "email", utm_campaign: "spring" };
@@ -83,6 +83,18 @@ describe("composeUtm", () => {
     expect(composed.length).toBe(2069);
     expect(composed.length).toBeGreaterThan(DESTINATION_MAX_LENGTH);
     expect(Destination.safeParse(composed).success).toBe(false);
+  });
+});
+
+describe("composeCampaignLink", () => {
+  it("writes the campaign's shared values and the link's own into the base URL, in compose order", () => {
+    const campaign = { baseUrl: "https://shop.example/p?ref=a#top", utmCampaign: "Spring 26", utmId: "Q2" };
+    expect(composeCampaignLink(campaign, { source: "news", medium: "email", content: "hero", term: null })).toBe(
+      "https://shop.example/p?ref=a&utm_id=Q2&utm_source=news&utm_medium=email&utm_campaign=Spring%2026&utm_content=hero#top",
+    );
+    expect(composeCampaignLink({ ...campaign, utmId: null }, { source: "a", medium: "b" })).toBe(
+      "https://shop.example/p?ref=a&utm_source=a&utm_medium=b&utm_campaign=Spring%2026#top",
+    );
   });
 });
 

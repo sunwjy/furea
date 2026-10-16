@@ -2,13 +2,9 @@
 // campaign would compose for some source/medium (and optional content/term), ignoring UTM pair order and encoding.
 
 import { campaignUtmKey } from "./fold.ts";
-import { composeUtm, parseUtm } from "./utm.ts";
+import { type CampaignUtmParts, composeCampaignLink, composeUtm, parseUtm } from "./utm.ts";
 
-export interface AdoptCampaign {
-  baseUrl: string;
-  utmCampaign: string;
-  utmId: string | null;
-}
+export type AdoptCampaign = CampaignUtmParts;
 
 export const ADOPT_MISMATCH_REASONS = [
   "base_url_mismatch",
@@ -74,14 +70,7 @@ export function matchAdopt(
   if (takenUtmKeys.has(utmKey)) return refuse("utm_combination_taken");
   return {
     ok: true,
-    destination: composeUtm(campaign.baseUrl, {
-      utm_id: campaign.utmId ?? "",
-      utm_source: source,
-      utm_medium: medium,
-      utm_campaign: campaign.utmCampaign,
-      utm_term: term ?? "",
-      utm_content: content ?? "",
-    }),
+    destination: composeCampaignLink(campaign, utm),
     utm,
     utmKey,
   };

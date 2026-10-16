@@ -8,7 +8,7 @@ import {
   matchAdopt,
   type AdoptMismatchReason,
 } from "@furea/shared";
-import { campaignUtmKeys, getCampaign } from "../core/db/campaigns.ts";
+import { campaignUtmKeys, getCampaign, utmPartsOf } from "../core/db/campaigns.ts";
 import type { LinkChanges, LinkRow } from "../core/db/links.ts";
 import { apiError } from "./errors.ts";
 
@@ -37,7 +37,7 @@ export async function planMembership(
   const taken = await campaignUtmKeys(db, row.id);
   const match = matchAdopt(
     current.destination,
-    { baseUrl: row.base_url, utmCampaign: row.utm_campaign, utmId: row.utm_id },
+    utmPartsOf(row),
     taken,
   );
   if (!match.ok) return adoptMismatch(match.reason);

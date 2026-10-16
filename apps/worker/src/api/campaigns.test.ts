@@ -203,7 +203,7 @@ describe("POST /api/v1/campaigns/:id/links", () => {
       { field: "items[2].slug", code: "slug_taken" },
       { field: "items[3].slug", code: "slug_taken", conflictsWith: { item: 0 } },
       { field: "items[3].utm", code: "utm_combination_taken", conflictsWith: { item: 0 } },
-      { field: "items[4].utm", code: "destination_invalid" },
+      { field: "items[4].utm", code: "rewrite_too_long" },
     ]);
     // The message names the colliding value as stored.
     expect(error.details?.[0]?.["message"]).toMatch(/Newsletter \/ email/);

@@ -1,8 +1,15 @@
 // D1 access for the `campaigns` table (ADR 0007, ADR 0016). Aggregates are computed from the member links on every
 // read, never stored (ADR 0009).
 
-import { foldKey } from "@furea/shared";
+import { type CampaignUtmParts, foldKey } from "@furea/shared";
 import type { ListPosition } from "./links.ts";
+
+/** The part of a campaign every member's destination is composed from (ADR 0012). */
+export const utmPartsOf = (row: CampaignRow): CampaignUtmParts => ({
+  baseUrl: row.base_url,
+  utmCampaign: row.utm_campaign,
+  utmId: row.utm_id,
+});
 
 export interface CampaignRow {
   id: string;

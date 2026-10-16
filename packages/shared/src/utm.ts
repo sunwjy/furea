@@ -53,6 +53,33 @@ export function composeUtm(destination: string, values: UtmValues): string {
   return `${head}?${kept}${separator}${added}${fragment}`;
 }
 
+/** What every member of a campaign shares (ADR 0012): the base URL, the UTM campaign and the optional `utm_id`. */
+export interface CampaignUtmParts {
+  baseUrl: string;
+  utmCampaign: string;
+  utmId: string | null;
+}
+
+/** A campaign link's own values (ADR 0012): source and medium, and optional content and term. */
+export interface OwnUtmValues {
+  source: string;
+  medium: string;
+  content?: string | null | undefined;
+  term?: string | null | undefined;
+}
+
+/** A campaign link's destination: the campaign's shared part and the link's own values (ADR 0012, ADR 0014). */
+export function composeCampaignLink(campaign: CampaignUtmParts, own: OwnUtmValues): string {
+  return composeUtm(campaign.baseUrl, {
+    utm_id: campaign.utmId ?? "",
+    utm_source: own.source,
+    utm_medium: own.medium,
+    utm_campaign: campaign.utmCampaign,
+    utm_term: own.term ?? "",
+    utm_content: own.content ?? "",
+  });
+}
+
 export type UtmWarning =
   /** `UTM_Source` and the like: ordinary query to furea, and most likely ignored by the destination's analytics. */
   | { code: "case_variant_key"; key: string }

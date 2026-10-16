@@ -6,7 +6,7 @@ import {
   BulkCreateCampaignLinksRequest,
   CAMPAIGN_LINK_LIMIT,
   campaignUtmKey,
-  composeUtm,
+  composeCampaignLink,
   CreateCampaignRequest,
   generateSlug,
   ListCampaignsQuery,
@@ -16,7 +16,6 @@ import {
   UpdateCampaignRequest,
   type Campaign,
   type BulkCreateCampaignLinksBody,
-  type CampaignLinkUtm,
   type CampaignLinks,
   type CampaignPage,
   type ErrorDetail,
@@ -33,6 +32,7 @@ import {
   updateCampaign,
   type CampaignRow,
   type RewrittenDestination,
+  utmPartsOf,
 } from "../core/db/campaigns.ts";
 import {
   createdAtOf,
@@ -44,7 +44,7 @@ import {
 import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
-import { baseUrlFor, destinationFor } from "./destination.ts";
+import { baseUrlFor, composedTooLong } from "./destination.ts";
 import { apiError, notFound, validationFailed } from "./errors.ts";
 import { toLinks, utmOf } from "./link-resource.ts";
 import { logScreening, screen } from "./screening.ts";
@@ -119,18 +119,11 @@ campaigns.patch("/:id", requireWrite, jsonBody(updateCampaignRequestFor), async 
   const rewritten: RewrittenDestination[] = [];
   if (rewrites) {
     // Every member is recomposed before anything is written; one too long refuses the edit as a whole (ADR 0014).
-    const destination = destinationFor(new URL(c.req.url));
     const details: ErrorDetail[] = [];
     for (const row of await listCampaignLinks(c.env.DB, id)) {
-      const composed = composeCampaignLink(next, utmOf(row.destination));
-      if (!destination.safeParse(composed).success) {
-        details.push({
-          field: "baseUrl",
-          code: "rewrite_too_long",
-          slug: row.slug,
-          message: `The destination of /${row.slug} would be longer than 2048 characters.`,
-        });
-      }
+      const composed = composeCampaignLink(utmPartsOf(next), utmOf(row.destination));
+      const tooLong = composedTooLong(composed, "baseUrl", row.slug);
+      if (tooLong !== null) details.push(tooLong);
       rewritten.push({ slug: row.slug, destination: composed });
     }
     if (details.length > 0) return validationFailed(details);
@@ -190,8 +183,7 @@ campaigns.post("/:id/links", requireWrite, jsonBody(BulkCreateCampaignLinksReque
     );
   }
 
-  const destination = destinationFor(new URL(c.req.url));
-  const first = await planBulkCreate(c.env.DB, campaign, items, destination);
+  const first = await planBulkCreate(c.env.DB, campaign, items);
   if (first.details.length > 0) return validationFailed(first.details);
 
   // One lookup for the base URL's host: every item shares it (ADR 0013).
@@ -215,7 +207,7 @@ campaigns.post("/:id/links", requireWrite, jsonBody(BulkCreateCampaignLinksReque
       break;
     } catch (error) {
       if (!isUniqueViolation(error) || attempt === BULK_INSERT_ATTEMPTS) throw error;
-      const again = await planBulkCreate(c.env.DB, campaign, items, destination);
+      const again = await planBulkCreate(c.env.DB, campaign, items);
       if (again.details.length > 0) return validationFailed(again.details);
       // Only a generated slug collided: draw new ones.
       planned = again.planned;
@@ -250,7 +242,6 @@ async function planBulkCreate(
   db: D1Database,
   campaign: CampaignRow,
   items: BulkCreateCampaignLinksBody["items"],
-  destination: ReturnType<typeof destinationFor>,
 ): Promise<{ planned: PlannedItem[]; details: ErrorDetail[] }> {
   const members = new Map((await listCampaignLinks(db, campaign.id)).map((row) => [row.slug, row]));
   const takenKeys = await campaignUtmKeys(db, campaign.id);
@@ -297,14 +288,9 @@ async function planBulkCreate(
     } else {
       seenKeys.set(utmKey, i);
     }
-    const composed = composeCampaignLink(campaign, item.utm);
-    if (!destination.safeParse(composed).success) {
-      details.push({
-        field: `items[${i}].utm`,
-        code: "destination_invalid",
-        message: "The composed destination would be longer than 2048 characters.",
-      });
-    }
+    const composed = composeCampaignLink(utmPartsOf(campaign), item.utm);
+    const tooLong = composedTooLong(composed, `items[${i}].utm`);
+    if (tooLong !== null) details.push(tooLong);
     return { slug: item.slug, destination: composed, title: item.title ?? null, utmKey };
   });
   return { planned, details };
@@ -329,18 +315,6 @@ async function assignSlugs(db: D1Database, given: readonly (string | undefined)[
   }
   if (slugs.some((slug) => slug === undefined)) throw new Error("no free generated slug");
   return slugs as string[];
-}
-
-/** A campaign link's destination: the campaign's shared part and the link's own values (ADR 0012, ADR 0014). */
-export function composeCampaignLink(campaign: CampaignRow, utm: CampaignLinkUtm): string {
-  return composeUtm(campaign.base_url, {
-    utm_id: campaign.utm_id ?? "",
-    utm_source: utm.source,
-    utm_medium: utm.medium,
-    utm_campaign: campaign.utm_campaign,
-    utm_term: utm.term ?? "",
-    utm_content: utm.content ?? "",
-  });
 }
 
 /** A member's own UTM values as stored, for a message: `Newsletter / email / story`. */

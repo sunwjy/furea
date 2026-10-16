@@ -274,7 +274,7 @@ describe("PATCH /api/v1/links/:slug with utm", () => {
 
     await campaignWith("Own long", [{ utm: { source: "a", medium: "m" }, slug: "own-long" }]);
     const long = await errorOf(await api("PATCH", "/links/own-long", { utm: { content: "c".repeat(2048) } }), 400);
-    expect(long.details).toMatchObject([{ field: "utm", code: "destination_invalid" }]);
+    expect(long.details).toMatchObject([{ field: "utm", code: "rewrite_too_long" }]);
     expect((await api("PATCH", "/links/noSuchLink", { utm: { source: "x" } })).status).toBe(404);
   });
 });

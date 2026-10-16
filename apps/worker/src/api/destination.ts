@@ -1,7 +1,7 @@
 // A destination field as the Worker checks it: the `shared` rules plus "never this instance" (`destination_self`),
 // which needs the request's host. Used by links and the root destination alike (ADR 0008).
 
-import { BaseUrl, Destination, hasUtmKey } from "@furea/shared";
+import { BaseUrl, Destination, DESTINATION_MAX_LENGTH, hasUtmKey, type ErrorDetail } from "@furea/shared";
 
 /** `s.example.com.` is the same host as `s.example.com`; `URL` already lower-cases it. */
 const hostOf = (url: URL) => url.hostname.replace(/\.$/, "");
@@ -22,4 +22,19 @@ export function baseUrlFor(url: URL) {
       params: { code: "base_url_has_utm" },
     })
     .describe(BaseUrl.description ?? "");
+}
+
+/**
+ * `rewrite_too_long` (ADR 0009) for a destination the Worker composed (ADR 0014) that is longer than 2048 characters,
+ * naming the link when it already exists; `null` when it fits. The base URL already passed `baseUrlFor` and compose
+ * percent-encodes every value, so length is the only way a composed destination can fail.
+ */
+export function composedTooLong(composed: string, field: string, slug?: string): ErrorDetail | null {
+  if (composed.length <= DESTINATION_MAX_LENGTH) return null;
+  return {
+    field,
+    code: "rewrite_too_long",
+    ...(slug === undefined ? {} : { slug }),
+    message: `The composed destination${slug === undefined ? "" : ` of /${slug}`} would be longer than ${DESTINATION_MAX_LENGTH} characters.`,
+  };
 }

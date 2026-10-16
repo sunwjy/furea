@@ -19,7 +19,8 @@ export async function screen(
   destinations: readonly ScreenedDestination[],
   override: "skip" | undefined,
 ): Promise<Response | ScreeningOutcome> {
-  if (override !== undefined && caller?.kind !== "session") {
+  // A browser session or an Access sign-in: the operator in person, never an API key.
+  if (override !== undefined && (caller === null || caller.kind === "apiKey")) {
     return apiError(403, "forbidden", "Session required to override screening.");
   }
   if (destinations.length === 0) return "passed";

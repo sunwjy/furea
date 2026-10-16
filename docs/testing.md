@@ -22,9 +22,9 @@ Five tiers, named so that CI jobs, package scripts and this page use the same wo
 
 | Command | Tiers |
 |---|---|
-| `pnpm test` (root, via turbo) | Static checks that live in packages plus Unit |
+| `pnpm test` (root, via turbo) | Static checks that live in packages plus Unit, and `pnpm test:scripts` (the root `scripts/*.test.mjs` under `node --test`) |
 | `pnpm test:e2e` | E2E (starts `wrangler dev` itself) |
-| `pnpm test:compat` | Compat (needs network for `npm pack`) |
+| `pnpm test:compat` | Compat (needs network for `npm pack`; `--previous <tarball>` uses a tarball at hand, `--migrations <dir>` another migrations directory) |
 | `pnpm test:integration` | Integration; refuses to start unless `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set |
 
 In turbo, `test` does not depend on `^build` except in `packages/cli`, whose tests exercise the tarball assembly and therefore need `apps/worker` and `apps/admin` built first. `apps/worker`'s `test` depends on `apps/admin`'s `build` (not on `^build`): the dev-only `wrangler.jsonc` points the assets binding at `apps/admin/dist/assets`, which must exist for the Workers pool to start.
@@ -75,7 +75,8 @@ No component tests in v1: the screens were validated by the admin-UI prototype a
   6. See the link's lifetime total (the clicks of flow 3) on its feed card ([#48](https://github.com/sunwjy/furea/issues/48)).
   7. Set a root destination on the Settings page, get the 302 from `/`, unset it and get the 404 ([#46](https://github.com/sunwjy/furea/issues/46)).
   8. Open the stats page and see the "estimates unavailable" state, with no analytics token ([#49](https://github.com/sunwjy/furea/issues/49)).
-  9. Create a campaign, add two links in the row editor (one typed, one pasted from a spreadsheet), open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
+  9. See the Cloudflare Access form on the Security page and have a non-team domain refused; turning Access mode on is left to the Workers pool, which stands in for the Access team's certs with an injected `fetch` ([#55](https://github.com/sunwjy/furea/issues/55)).
+  10. Create a campaign, add two links in the row editor (one typed, one pasted from a spreadsheet), open one short URL and land on the composed destination with its UTM parameters ([#51](https://github.com/sunwjy/furea/issues/51)).
 - The UTM builder's two-way sync is left to the `shared` golden vectors.
 - `globalSetup` prepares the local instance: `wrangler d1 migrations apply --local`, then inserts the operator password row with `wrangler d1 execute --local`, the hash computed in Node with the `shared` hashing function. Then it starts `wrangler dev` and waits for the port.
 - Budget: the whole spec should stay under about 30 seconds; if it grows past a handful of flows, split by screen rather than by step.
@@ -90,6 +91,10 @@ The REST client takes `fetch` as a constructor argument; tests pass a replaying 
   - The harness is `packages/cli/test/fixtures.ts`: a test calls `useFixture(scenario)` and gets a `fetch`, a token and an account id. Replaying, they are the fixture and its placeholders (`TOKEN` or `cfat_TOKEN`, `ACCOUNT_ID`, `ID_n`, `host-n.example.com`, `operator@example.com`); replay fails on any request the recording does not have, and `done()` fails if a recorded request was not made. With `FUREA_RECORD_FIXTURES=1` the same test runs against the real API with the token and account id from the environment (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, or the variable the scenario names) and rewrites the file, so `FUREA_RECORD_FIXTURES=1 CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… pnpm --filter furea test` re-records the unit scenarios too.
   - A scenario that a real account cannot produce on demand (the verify fallback after a `401`, a token that sees several accounts) is marked `replayOnly` and keeps its hand-made fixture.
 - Scenarios, at minimum: **fresh install** on an empty account; **upgrade** of an existing instance with one pending migration (exercises the version gate, `keep_bindings`, migration listing); **resume** after an expired asset upload session (ADR 0006 failure recovery).
+  - `deploy` scenarios ([#57](https://github.com/sunwjy/furea/issues/57)) install a stand-in package, `packages/cli/test/instance/` (a tiny Worker, a copy of the manifest shape, two assets, two migrations), passed as `CliDeps.installer`. Its bytes never change, so the asset hashes in the fixtures stay valid across admin builds. Besides the three above: an unchanged re-run (only `reuse`/`skip`), the version gate, the `10089` retry without `CLICKS`, and a non-`10089` refusal. The deploy fixtures were written by hand from the documented response shapes and wrangler's request code; re-record them once a CI account exists.
+  - `status` ([#59](https://github.com/sunwjy/furea/issues/59)) replays one hand-written healthy instance, `status-healthy.json`; each drift case (a missing binding, Cron Trigger or hostname, changed observability, sync-pending links, a missing `CLICKS`) edits a copy of it in the test. The npm registry lookup of the update check is a separate injected `fetch` (`CliDeps.registryFetch`), so every row of the ADR 0006 update-check table, the opt-outs and the silent failure are unit-tested without the network.
+  - `logs` ([#61](https://github.com/sunwjy/furea/issues/61)) takes its `trace-v1` WebSocket and its renewal timer as `CliDeps.tail` and `CliDeps.clock`, so a test delivers messages and fires the `expires_at` renewal itself. The trace events it replays are `packages/cli/test/fixtures/tail-messages.ndjson`, one WebSocket message per line, carrying headers, client IPs and `cf` fields that the field-dropping test asserts never reach the output. Both these and the `logs-*` REST fixtures were written by hand from the documented shapes; re-record them once a CI account exists.
+  - Own-domain scenarios ([#58](https://github.com/sunwjy/furea/issues/58)): a first install attached to its own domain, a re-run that reuses it, a zone missing from the account, a hostname already in use (with the interactive workers.dev offer), and `domain set` / `domain set` replacing a hostname / a hostname held by another Worker / `domain unset`. Also hand-written; the conflict's error code and message are a guess until recorded.
 - These tests cover the find-or-create logic, the `create` / `reuse` / `skip` output lines, error mapping (a rejected binding is a hard error) and the tarball assembly (which is why `cli`'s `test` depends on `build`).
 
 ### Integration: the CI instance
@@ -123,6 +128,8 @@ On `main` pushes the job reports only. In `release.yml` it runs **before `change
 6. On failure, print the failing migration file, a link to ADR 0006 and the reminder that column drops and renames take two releases.
 
 It runs in `ci.yml` only when the PR changes `apps/worker/migrations/` (path filter), and always in the release job.
+
+The skip is decided by npm itself: only an `E404` for `furea@latest` skips, so an unreachable registry fails the check instead of passing it (`scripts/check-expand-only.test.mjs` proves both against a local registry). The check's unit tests do not boot miniflare: the full run needs a built tarball and is exercised by `pnpm test:compat --previous <tarball>` after `pnpm --filter furea pack`.
 
 ## Considered and rejected
 

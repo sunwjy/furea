@@ -227,7 +227,19 @@ test("8. open the stats page and see the estimates unavailable state, with no an
   await expect(hint).toHaveCount(0);
 });
 
-test("9. create a campaign, add two links in the row editor, and land on a composed destination", async () => {
+test("9. see the Cloudflare Access form on the Security page and have a non-team domain refused", async () => {
+  // Turning Access mode on needs a real Access team's public keys, which E2E never fetches; the Worker side of
+  // Access mode is covered in the Workers pool with a stand-in team.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Security" }).click();
+  await expect(page.getByRole("heading", { name: "Cloudflare Access" })).toBeVisible();
+  await page.getByLabel("Team domain").fill("example.com");
+  await page.getByLabel("Application Audience (AUD) tag").fill("some-aud");
+  await page.getByRole("button", { name: "Turn on Access mode" }).click();
+  await expect(page.getByText("Use the team domain, like myteam.cloudflareaccess.com.")).toBeVisible();
+  expect(await (await page.request.get("/api/v1/auth/login")).json()).toEqual({ method: "password" });
+});
+
+test("10. create a campaign, add two links in the row editor, and land on a composed destination", async () => {
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Campaigns" }).click();
   await expect(page.getByText("No campaigns yet.", { exact: false })).toBeVisible();
   await page.getByRole("link", { name: "New campaign" }).click();

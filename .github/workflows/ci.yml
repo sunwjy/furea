@@ -28,6 +28,53 @@ jobs:
       - run: pnpm exec turbo run build typecheck
       - run: node scripts/check-tarball.mjs
 
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # Every migration carries the expand-only header; on a PR, the migrations and changesets it adds name each
+      # other through `Migration: NNNN_name.sql` lines (docs/release.md).
+      - if: github.event_name == 'pull_request'
+        run: node scripts/check-migrations.mjs --base "origin/${{ github.base_ref }}"
+      - if: github.event_name != 'pull_request'
+        run: node scripts/check-migrations.mjs
+
+  compat:
+    name: Compat
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Only when apps/worker/migrations/ changed (docs/testing.md); the release job runs it unconditionally.
+      - id: changes
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+            || ! git diff --quiet "$BASE"...HEAD -- apps/worker/migrations/; then
+            echo "migrations=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No change under apps/worker/migrations/; Compat skipped."
+          fi
+      - if: steps.changes.outputs.migrations == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.changes.outputs.migrations == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - if: steps.changes.outputs.migrations == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.migrations == 'true'
+        run: pnpm test:compat
+
   unit:
     name: Unit
     runs-on: ubuntu-latest
@@ -39,6 +86,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm test:scripts
       - run: pnpm exec turbo run test
 
   e2e:

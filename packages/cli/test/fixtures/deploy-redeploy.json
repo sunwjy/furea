@@ -1,0 +1,399 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_9",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database?name=furea&per_page=100",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "uuid": "ID_1",
+              "name": "furea",
+              "created_at": "2026-10-16T00:00:00.000Z",
+              "version": "production",
+              "num_tables": 0,
+              "file_size": 12288
+            }
+          ],
+          "result_info": {
+            "page": 1,
+            "per_page": 100,
+            "count": 1,
+            "total_count": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/storage/kv/namespaces?per_page=1000&page=1",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "id": "ID_3",
+              "title": "furea-staging",
+              "supports_url_encoding": true
+            },
+            {
+              "id": "ID_2",
+              "title": "furea",
+              "supports_url_encoding": true
+            }
+          ],
+          "result_info": {
+            "page": 1,
+            "per_page": 1000,
+            "count": 2,
+            "total_count": 2,
+            "total_pages": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/settings",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "bindings": [
+              {
+                "type": "d1",
+                "name": "DB",
+                "id": "ID_1"
+              },
+              {
+                "type": "kv_namespace",
+                "name": "KV",
+                "namespace_id": "ID_2"
+              },
+              {
+                "type": "assets",
+                "name": "ASSETS"
+              },
+              {
+                "type": "analytics_engine",
+                "name": "CLICKS",
+                "dataset": "furea_clicks"
+              },
+              {
+                "type": "ratelimit",
+                "name": "LOGIN_IP_LIMITER",
+                "namespace_id": "730016001",
+                "simple": {
+                  "limit": 5,
+                  "period": 60
+                }
+              },
+              {
+                "type": "ratelimit",
+                "name": "LOGIN_GLOBAL_LIMITER",
+                "namespace_id": "730016002",
+                "simple": {
+                  "limit": 30,
+                  "period": 60
+                }
+              },
+              {
+                "type": "plain_text",
+                "name": "FUREA_VERSION",
+                "text": "0.2.0"
+              },
+              {
+                "type": "secret_text",
+                "name": "ANALYTICS_TOKEN"
+              }
+            ],
+            "compatibility_date": "2026-09-28",
+            "compatibility_flags": [],
+            "logpush": false,
+            "observability": {
+              "enabled": true,
+              "head_sampling_rate": 1,
+              "logs": {
+                "enabled": true,
+                "invocation_logs": false,
+                "persist": true
+              }
+            },
+            "placement": {},
+            "tail_consumers": null,
+            "usage_model": "standard"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database/ID_1/query",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "sql": "CREATE TABLE IF NOT EXISTS d1_migrations(\n  id         INTEGER PRIMARY KEY AUTOINCREMENT,\n  name       TEXT UNIQUE,\n  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL\n);\nSELECT name FROM d1_migrations ORDER BY id;"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "success": true,
+              "results": [],
+              "meta": {
+                "served_by": "v3-prod",
+                "duration": 0.2,
+                "changes": 0,
+                "last_row_id": 0,
+                "changed_db": false,
+                "size_after": 12288,
+                "rows_read": 0,
+                "rows_written": 0
+              }
+            },
+            {
+              "success": true,
+              "results": [
+                {
+                  "name": "0001_init.sql"
+                },
+                {
+                  "name": "0002_campaigns.sql"
+                }
+              ],
+              "meta": {
+                "served_by": "v3-prod",
+                "duration": 0.2,
+                "changes": 0,
+                "last_row_id": 0,
+                "changed_db": false,
+                "size_after": 12288,
+                "rows_read": 0,
+                "rows_written": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/assets-upload-session",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "manifest": {
+            "/admin/index.html": {
+              "hash": "0ab3e2323548d4413aa042fcbafe2b2e",
+              "size": 36
+            },
+            "/favicon.ico": {
+              "hash": "609ac59a23497694854818afce90b030",
+              "size": 4
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "jwt": "JWT_1",
+            "buckets": []
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PUT",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "furea",
+            "etag": "ID_7",
+            "handlers": [
+              "fetch",
+              "scheduled"
+            ],
+            "compatibility_date": "2026-09-28",
+            "created_on": "2026-10-16T00:00:00.000000Z",
+            "modified_on": "2026-10-16T00:00:00.000000Z",
+            "has_assets": true,
+            "has_modules": true,
+            "usage_model": "standard"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/schedules",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "schedules": [
+              {
+                "cron": "*/5 * * * *",
+                "created_on": "2026-10-16T00:00:00.000000Z",
+                "modified_on": "2026-10-16T00:00:00.000000Z"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/domains?service=furea",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [],
+          "result_info": {
+            "page": 1,
+            "per_page": 50,
+            "count": 0,
+            "total_count": 0
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/subdomain",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "enabled": true,
+            "previews_enabled": false
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/subdomain",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "subdomain": "SUBDOMAIN_1"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database/ID_1/query",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "success": true,
+              "results": [],
+              "meta": {
+                "served_by": "v3-prod",
+                "duration": 0.2,
+                "changes": 0,
+                "last_row_id": 0,
+                "changed_db": false,
+                "size_after": 12288,
+                "rows_read": 0,
+                "rows_written": 0
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

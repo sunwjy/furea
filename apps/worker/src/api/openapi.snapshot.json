@@ -762,7 +762,7 @@
         }
       },
       "patch": {
-        "summary": "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is screened like a link's destination.",
+        "summary": "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is screened like a link's destination. access is session only: turning Access mode on is refused on a workers.dev host (access_requires_own_domain) and when the team's public keys cannot be fetched (access_unreachable); access: null turns it off from any host.",
         "requestBody": {
           "required": true,
           "content": {
@@ -791,6 +791,9 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "413": {
@@ -1232,6 +1235,32 @@
               {
                 "type": "string",
                 "description": "An absolute http or https URL, at most 2048 characters of printable ASCII (percent-encoded), not pointing at this instance."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "access": {
+            "description": "Turns Cloudflare Access mode on (session only, own domain only, the team's public keys must be reachable); null turns it off.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "teamDomain": {
+                    "description": "The Zero Trust team domain, `<team>.cloudflareaccess.com`.",
+                    "type": "string"
+                  },
+                  "aud": {
+                    "type": "string",
+                    "description": "The Application Audience (AUD) tag of the Access application that guards /admin and /api."
+                  }
+                },
+                "required": [
+                  "teamDomain",
+                  "aud"
+                ],
+                "additionalProperties": false
               },
               {
                 "type": "null"

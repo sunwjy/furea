@@ -24,8 +24,25 @@ export function packageVersion(): string {
   return version;
 }
 
+export interface PackageFiles {
+  workerScript: URL;
+  workerManifest: URL;
+  assetsRoot: URL;
+  migrations: URL;
+}
+
+/** What `deploy` installs: this package's own version and files, so CLI and Worker never diverge (ADR 0007). */
+export interface Installer {
+  version: string;
+  files: PackageFiles;
+}
+
+export function ownInstaller(): Installer {
+  return { version: packageVersion(), files: packageFiles() };
+}
+
 /** Paths inside the package: the Worker bundle and manifest, the assets root and the migrations directory. */
-export function packageFiles(root: URL = packageRoot()) {
+export function packageFiles(root: URL = packageRoot()): PackageFiles {
   return {
     workerScript: new URL("dist/worker/index.js", root),
     workerManifest: new URL("dist/worker/manifest.json", root),

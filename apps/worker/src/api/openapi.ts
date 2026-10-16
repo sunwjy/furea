@@ -283,10 +283,12 @@ const OPERATIONS: Operation[] = [
     summary:
       "Edit the settings as a merge-patch. rootDestination: null unsets it. analyticsConfigured and version are " +
       "read-only. An empty {} still rewrites the root destination's redirect cache entry. A rootDestination is " +
-      "screened like a link's destination.",
+      "screened like a link's destination. access is session only: turning Access mode on is refused on a " +
+      "workers.dev host (access_requires_own_domain) and when the team's public keys cannot be fetched " +
+      "(access_unreachable); access: null turns it off from any host.",
     body: "UpdateSettingsRequest",
     success: { status: 200, description: "The settings after the edit.", schema: "Settings" },
-    errors: [...BODY_ERRORS, 401, 403, 422],
+    errors: [...BODY_ERRORS, 401, 403, 409, 422],
   },
   {
     method: "post",

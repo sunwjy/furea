@@ -1,0 +1,170 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_9",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database?name=furea&per_page=100",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "uuid": "ID_1",
+              "name": "furea",
+              "created_at": "2026-10-16T00:00:00.000Z",
+              "version": "production",
+              "num_tables": 0,
+              "file_size": 12288
+            }
+          ],
+          "result_info": {
+            "page": 1,
+            "per_page": 100,
+            "count": 1,
+            "total_count": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/storage/kv/namespaces?per_page=1000&page=1",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "id": "ID_3",
+              "title": "furea-staging",
+              "supports_url_encoding": true
+            },
+            {
+              "id": "ID_2",
+              "title": "furea",
+              "supports_url_encoding": true
+            }
+          ],
+          "result_info": {
+            "page": 1,
+            "per_page": 1000,
+            "count": 2,
+            "total_count": 2,
+            "total_pages": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/settings",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "bindings": [
+              {
+                "type": "d1",
+                "name": "DB",
+                "id": "ID_1"
+              },
+              {
+                "type": "kv_namespace",
+                "name": "KV",
+                "namespace_id": "ID_2"
+              },
+              {
+                "type": "assets",
+                "name": "ASSETS"
+              },
+              {
+                "type": "analytics_engine",
+                "name": "CLICKS",
+                "dataset": "furea_clicks"
+              },
+              {
+                "type": "ratelimit",
+                "name": "LOGIN_IP_LIMITER",
+                "namespace_id": "730016001",
+                "simple": {
+                  "limit": 5,
+                  "period": 60
+                }
+              },
+              {
+                "type": "ratelimit",
+                "name": "LOGIN_GLOBAL_LIMITER",
+                "namespace_id": "730016002",
+                "simple": {
+                  "limit": 30,
+                  "period": 60
+                }
+              },
+              {
+                "type": "plain_text",
+                "name": "FUREA_VERSION",
+                "text": "0.9.0"
+              },
+              {
+                "type": "secret_text",
+                "name": "ANALYTICS_TOKEN"
+              }
+            ],
+            "compatibility_date": "2026-09-28",
+            "compatibility_flags": [],
+            "logpush": false,
+            "observability": {
+              "enabled": true,
+              "head_sampling_rate": 1,
+              "logs": {
+                "enabled": true,
+                "invocation_logs": false,
+                "persist": true
+              }
+            },
+            "placement": {},
+            "tail_consumers": null,
+            "usage_model": "standard"
+          }
+        }
+      }
+    }
+  ]
+}

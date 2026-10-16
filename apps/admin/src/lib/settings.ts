@@ -12,5 +12,8 @@ export const settingsQuery = queryOptions({
 export const updateSettings = (body: UpdateSettingsRequest) =>
   apiJson("/settings", Settings, { method: "PATCH", body });
 
+/** The `workers.dev` fallback hostname, where Access mode cannot be turned on (ADR 0003). */
+export const isWorkersDev = (hostname: string) => hostname.toLowerCase().replace(/\.$/, "").endsWith(".workers.dev");
+
 /** Ends every session, this one included: the caller goes back to the login page. */
 export const changePassword = (body: ChangePasswordRequest) => apiSend("/password", { method: "POST", body });

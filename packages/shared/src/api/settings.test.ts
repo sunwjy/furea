@@ -38,6 +38,28 @@ describe("UpdateSettingsRequest", () => {
     ]);
   });
 
+  it("accepts Access mode settings, normalising the team domain, and null to turn it off", () => {
+    const aud = "a".repeat(64);
+    expect(UpdateSettingsRequest.parse({ access: { teamDomain: "myteam.cloudflareaccess.com", aud } })).toEqual({
+      access: { teamDomain: "myteam.cloudflareaccess.com", aud },
+    });
+    expect(
+      UpdateSettingsRequest.parse({ access: { teamDomain: " https://MyTeam.cloudflareaccess.com/ ", aud: ` ${aud} ` } }),
+    ).toEqual({ access: { teamDomain: "myteam.cloudflareaccess.com", aud } });
+    expect(UpdateSettingsRequest.parse({ access: null })).toEqual({ access: null });
+  });
+
+  it("refuses a team domain that is not a Cloudflare Access team domain, and an empty aud", () => {
+    for (const teamDomain of ["example.com", "evil.com/x.cloudflareaccess.com", "a.b.cloudflareaccess.com.evil", ""]) {
+      expect(codes(UpdateSettingsRequest.safeParse({ access: { teamDomain, aud: "abc" } }))).toEqual([
+        { path: "access.teamDomain", code: "access_team_domain_invalid" },
+      ]);
+    }
+    expect(
+      codes(UpdateSettingsRequest.safeParse({ access: { teamDomain: "t.cloudflareaccess.com", aud: "  " } })),
+    ).toEqual([{ path: "access.aud", code: "access_aud_invalid" }]);
+  });
+
   it("refuses unknown fields", () => {
     expect(codes(UpdateSettingsRequest.safeParse({ theme: "dark" }))).toEqual([
       { path: "", code: "unrecognized_keys" },

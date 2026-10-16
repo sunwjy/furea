@@ -41,13 +41,26 @@ function LoginPage() {
               : "Enter the operator password."}
           </CardDescription>
         </CardHeader>
-        {method.data?.method === "access" ? null : (
-          <CardContent>
-            <PasswordForm />
-          </CardContent>
-        )}
+        <CardContent>
+          {method.isPending ? null : method.data?.method === "access" ? <AccessScreen /> : <PasswordForm />}
+        </CardContent>
       </Card>
     </main>
+  );
+}
+
+/** Access mode: the password is not accepted, so the only way on is a full navigation through Cloudflare Access. */
+function AccessScreen() {
+  const search = Route.useSearch();
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        The operator password is turned off. Sign in with the identity your Access application allows.
+      </p>
+      <Button onClick={() => window.location.assign(`/admin${search.redirect ?? "/"}`)}>
+        Continue with Cloudflare Access
+      </Button>
+    </div>
   );
 }
 

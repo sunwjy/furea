@@ -42,7 +42,7 @@ Both files live in `.github/workflows/`.
 - **Compat check** (`pnpm test:compat`) only when the PR touches `apps/worker/migrations/` (path filter); see `docs/testing.md`.
 - No Integration tier on pull requests: fork PRs cannot read the `cloudflare-ci` secrets. A separate `integration` job runs on pushes to `main` and reports without blocking.
 - **Tarball check**: `pnpm --filter furea pack --dry-run --json` must list `bin/furea.js`, `dist/cli/index.js`, `dist/worker/index.js`, `dist/worker/manifest.json`, at least one file under `dist/assets/admin/`, `dist/assets/favicon.ico` and every `migrations/*.sql` present in `apps/worker/migrations/`; nothing else outside `package.json`, `README.md` and `LICENSE`. This is the mechanical form of ADR 0007's "the installer can never deploy a Worker of a different version than itself".
-- Migration/changeset consistency check (above).
+- Migration/changeset consistency check (above): `node scripts/check-migrations.mjs --base origin/main` (the `migrations` job). Every file in `apps/worker/migrations/` must also open with the expand-only header `-- Expand-only: compatible with the previous release's Worker (ADR 0006).`; that half runs on `main` pushes too.
 
 ### `release.yml` (one file, two jobs)
 

@@ -1,8 +1,10 @@
 // Browser sessions and caller resolution (ADR 0003): the session cookie, the D1 row behind it, the Origin check
 // that refuses cookie-authenticated mutating requests from anywhere but the instance itself, and API keys.
 
+import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
+import { accessVerdict, accessVerifier } from "../core/access.ts";
 import { API_KEY_PREFIX, randomToken, sha256Hex } from "../core/crypto.ts";
 import { findApiKeyByHash, isUseDue, touchApiKey } from "../core/db/api-keys.ts";
 import { findSession, insertSession, purgeExpiredSessions } from "../core/db/sessions.ts";
@@ -54,28 +56,43 @@ export const authenticate = createMiddleware<ApiEnv>(async (c, next) => {
     await next();
     return;
   }
+  // Access mode replaces the password door (ADR 0003): only a valid Access JWT is the operator, a session cookie is not.
+  const access = await accessVerdict(c.env.DB, c.req.raw, accessVerifier);
+  if (access.on) {
+    if (access.identity !== null) {
+      if (!sameOrigin(c)) return crossOrigin();
+      c.set("caller", { kind: "access", scope: "write", email: access.identity.email });
+    }
+    await next();
+    return;
+  }
   const id = getCookie(c, SESSION_COOKIE);
   if (id) {
     const idHash = await sha256Hex(id);
     if ((await findSession(c.env.DB, idHash, new Date())) !== null) {
-      if (!SAFE_METHODS.has(c.req.method) && c.req.header("origin") !== new URL(c.req.url).origin) {
-        return apiError(403, "forbidden", "Origin does not match this instance.");
-      }
+      if (!sameOrigin(c)) return crossOrigin();
       c.set("caller", { kind: "session", scope: "write", sessionIdHash: idHash });
     }
   }
   await next();
 });
 
+/** Browser-authenticated mutating requests must come from the instance itself (ADR 0003; CSRF). */
+function sameOrigin(c: Context<ApiEnv>): boolean {
+  return SAFE_METHODS.has(c.req.method) || c.req.header("origin") === new URL(c.req.url).origin;
+}
+
+const crossOrigin = () => apiError(403, "forbidden", "Origin does not match this instance.");
+
 export const requireCaller = createMiddleware<ApiEnv>(async (c, next) => {
   if (c.var.caller === null) return unauthorized();
   await next();
 });
 
-/** Session-only endpoints: an API key can never change authentication (ADR 0009). */
+/** Session-only endpoints (a browser session or Access): an API key can never change authentication (ADR 0009). */
 export const requireSession = createMiddleware<ApiEnv>(async (c, next) => {
   if (c.var.caller === null) return unauthorized();
-  if (c.var.caller.kind !== "session") return apiError(403, "forbidden", "Session required.");
+  if (c.var.caller.kind === "apiKey") return apiError(403, "forbidden", "Session required.");
   await next();
 });
 

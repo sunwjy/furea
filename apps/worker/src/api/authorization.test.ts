@@ -61,6 +61,8 @@ const ENDPOINTS: Endpoint[] = [
   { method: "DELETE", path: "/api-keys/doesNotExist", expect: SESSION_ONLY },
   { method: "GET", path: "/settings", expect: ANY_CALLER },
   { method: "PATCH", path: "/settings", body: { rootDestination: null }, expect: WRITE },
+  // Access mode changes authentication; turning it off (already off here) keeps the matrix free of side effects.
+  { method: "PATCH", path: "/settings", body: { access: null }, expect: SESSION_ONLY },
   { method: "GET", path: "/campaigns", expect: ANY_CALLER },
   { method: "GET", path: `/campaigns/${CAMPAIGN}`, expect: ANY_CALLER },
   { method: "GET", path: `/campaigns/${CAMPAIGN}/links`, expect: ANY_CALLER },

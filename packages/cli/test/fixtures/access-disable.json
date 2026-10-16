@@ -1,0 +1,90 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_9",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database?name=furea&per_page=100",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "uuid": "ID_1",
+              "name": "furea",
+              "created_at": "2026-10-16T00:00:00.000Z",
+              "version": "production",
+              "num_tables": 6,
+              "file_size": 65536
+            }
+          ],
+          "result_info": {
+            "page": 1,
+            "per_page": 100,
+            "count": 1,
+            "total_count": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database/ID_1/query",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "sql": "DELETE FROM settings WHERE key IN ('access_team_domain', 'access_aud')"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "results": [],
+              "success": true,
+              "meta": {
+                "served_by": "v3-prod",
+                "duration": 0.2,
+                "changes": 2,
+                "last_row_id": 0,
+                "changed_db": true,
+                "size_after": 65536,
+                "rows_read": 2,
+                "rows_written": 2
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

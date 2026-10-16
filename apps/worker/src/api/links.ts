@@ -6,17 +6,17 @@ import {
   generateSlug,
   ListLinksQuery,
   UpdateLinkRequest,
-  type Link,
   type LinkPage,
 } from "@furea/shared";
 import { Hono } from "hono";
 import { deleteCacheEntry } from "../core/cache.ts";
-import { deleteLink, getLink, insertLink, listLinks, updateLink, type LinkRow } from "../core/db/links.ts";
+import { deleteLink, getLink, insertLink, listLinks, updateLink } from "../core/db/links.ts";
 import { writeThrough } from "../core/sync.ts";
 import type { ApiEnv } from "./context.ts";
 import { decodeCursor, encodeCursor } from "./cursor.ts";
 import { destinationFor } from "./destination.ts";
 import { apiError, notFound } from "./errors.ts";
+import { toLinkResource, toLinks } from "./link-resource.ts";
 import { logScreening, screen } from "./screening.ts";
 import { requireCaller, requireWrite } from "./session.ts";
 import { jsonBody, queryParams } from "./validate.ts";
@@ -50,7 +50,7 @@ links.post("/", requireWrite, jsonBody(createLinkRequestFor), async (c) => {
   const row = await getLink(c.env.DB, stored);
   if (row === null) throw new Error("a created link vanished");
   logScreening(screened, row.slug);
-  return c.json(toLink(await writeThrough(c.env.DB, c.env.KV, row), c.req.url), 201);
+  return c.json(await toLinkResource(c.env.DB, await writeThrough(c.env.DB, c.env.KV, row), c.req.url), 201);
 });
 
 links.get("/", requireCaller, queryParams(ListLinksQuery), async (c) => {
@@ -63,13 +63,13 @@ links.get("/", requireCaller, queryParams(ListLinksQuery), async (c) => {
   const last = items.at(-1);
   const nextCursor =
     rows.length > limit && last !== undefined ? encodeCursor({ createdAt: last.created_at, slug: last.slug }) : null;
-  return c.json({ items: items.map((row) => toLink(row, c.req.url)), nextCursor } satisfies LinkPage);
+  return c.json({ items: await toLinks(c.env.DB, items, c.req.url), nextCursor } satisfies LinkPage);
 });
 
 links.get("/:slug", requireCaller, async (c) => {
   const row = await getLink(c.env.DB, c.req.param("slug"));
   if (row === null) return notFound();
-  return c.json(toLink(row, c.req.url));
+  return c.json(await toLinkResource(c.env.DB, row, c.req.url));
 });
 
 // A merge-patch (ADR 0009). The cache entry is written even when nothing changed, so `PATCH {}` repairs it. A
@@ -77,14 +77,29 @@ links.get("/:slug", requireCaller, async (c) => {
 links.patch("/:slug", requireWrite, jsonBody(updateLinkRequestFor), async (c) => {
   const { destination, title, enabled, screening } = c.var.body;
   const slug = c.req.param("slug");
-  if (destination !== undefined && (await getLink(c.env.DB, slug)) === null) return notFound();
+  if (destination !== undefined) {
+    const current = await getLink(c.env.DB, slug);
+    if (current === null) return notFound();
+    // No drift (ADR 0012): a campaign link's destination is always composed from the campaign.
+    if (current.campaign_id !== null) {
+      return apiError(400, "validation_failed", "The request is invalid.", {
+        details: [
+          {
+            field: "destination",
+            code: "destination_campaign_owned",
+            message: "A campaign link's destination is composed from its campaign; detach the link to edit it.",
+          },
+        ],
+      });
+    }
+  }
   const destinations = destination === undefined ? [] : [{ field: "destination", url: destination }];
   const screened = await screen(c.var.caller, destinations, screening);
   if (screened instanceof Response) return screened;
   const row = await updateLink(c.env.DB, slug, { destination, title, enabled });
   if (row === null) return notFound();
   logScreening(screened, row.slug);
-  return c.json(toLink(await writeThrough(c.env.DB, c.env.KV, row), c.req.url));
+  return c.json(await toLinkResource(c.env.DB, await writeThrough(c.env.DB, c.env.KV, row), c.req.url));
 });
 
 links.delete("/:slug", requireWrite, async (c) => {
@@ -94,20 +109,3 @@ links.delete("/:slug", requireWrite, async (c) => {
   await deleteCacheEntry(c.env.KV, slug);
   return existed ? c.body(null, 204) : notFound();
 });
-
-/** `shortUrl` names the host the caller used, so `workers.dev` and an own domain each get their own (ADR 0009). */
-function toLink(row: LinkRow, requestUrl: string): Link {
-  return {
-    slug: row.slug,
-    shortUrl: `${new URL(requestUrl).origin}/${row.slug}`,
-    destination: row.destination,
-    title: row.title,
-    enabled: row.enabled === 1,
-    clickCount: row.click_count,
-    cacheSynced: row.cache_synced === 1,
-    campaign: null,
-    utm: null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}

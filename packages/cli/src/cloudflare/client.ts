@@ -309,4 +309,19 @@ export class CloudflareClient {
   async detachWorkerDomain(accountId: string, domainId: string): Promise<void> {
     await this.send("DELETE", `/accounts/${accountId}/workers/domains/${domainId}`);
   }
+
+  // `destroy` (ADR 0006 *destroy*).
+
+  /** Its secrets, schedules and workers.dev route go with it. */
+  async deleteScript(accountId: string, script: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/workers/scripts/${script}`);
+  }
+
+  async deleteKvNamespace(accountId: string, namespaceId: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/storage/kv/namespaces/${namespaceId}`);
+  }
+
+  async deleteD1Database(accountId: string, databaseId: string): Promise<void> {
+    await this.request("DELETE", `/accounts/${accountId}/d1/database/${databaseId}`);
+  }
 }

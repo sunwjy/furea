@@ -7,6 +7,8 @@ export interface LinkRow {
   enabled: 0 | 1;
   click_count: number;
   cache_synced: 0 | 1;
+  /** The campaign the link belongs to; `null` on a plain link. */
+  campaign_id: string | null;
   /** ISO 8601, UTC. */
   created_at: string;
   updated_at: string;
@@ -20,7 +22,7 @@ export interface NewLink {
   now?: Date;
 }
 
-const COLUMNS = "slug, destination, title, enabled, click_count, cache_synced, created_at, updated_at";
+const COLUMNS = "slug, destination, title, enabled, click_count, cache_synced, campaign_id, created_at, updated_at";
 
 export async function getLink(db: D1Database, slug: string): Promise<LinkRow | null> {
   return db.prepare(`SELECT ${COLUMNS} FROM links WHERE slug = ?`).bind(slug).first<LinkRow>();
@@ -56,6 +58,46 @@ export async function insertLink(db: D1Database, link: NewLink): Promise<boolean
     .bind(link.slug, link.destination, link.title ?? null, link.enabled === false ? 0 : 1, now, now)
     .run();
   return result.meta.changes === 1;
+}
+
+export interface NewCampaignLink {
+  slug: string;
+  destination: string;
+  title: string | null;
+  /** `campaignUtmKey` of the link's own UTM values (ADR 0016). */
+  utmKey: string;
+  now: Date;
+}
+
+/**
+ * Inserts a campaign's new links in one D1 batch, which is one transaction: a taken slug or a UTM combination the
+ * campaign already holds (the `UNIQUE` indexes) throws and leaves none of them created (ADR 0012).
+ */
+export async function insertCampaignLinks(
+  db: D1Database,
+  campaignId: string,
+  links: readonly NewCampaignLink[],
+): Promise<void> {
+  if (links.length === 0) return;
+  const insert = db.prepare(
+    "INSERT INTO links (slug, destination, title, campaign_id, campaign_utm_key, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)",
+  );
+  await db.batch(
+    links.map((link) => {
+      const now = link.now.toISOString();
+      return insert.bind(link.slug, link.destination, link.title, campaignId, link.utmKey, now, now);
+    }),
+  );
+}
+
+/** Every member of the campaign, oldest first, ties by slug: the member list order (ADR 0009). */
+export async function listCampaignLinks(db: D1Database, campaignId: string): Promise<LinkRow[]> {
+  const { results } = await db
+    .prepare(`SELECT ${COLUMNS} FROM links WHERE campaign_id = ? ORDER BY created_at, slug`)
+    .bind(campaignId)
+    .all<LinkRow>();
+  return results;
 }
 
 export interface LinkChanges {

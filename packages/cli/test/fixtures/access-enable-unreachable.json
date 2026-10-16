@@ -1,0 +1,92 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_9",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/d1/database?name=furea&per_page=100",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "uuid": "ID_1",
+              "name": "furea",
+              "created_at": "2026-10-16T00:00:00.000Z",
+              "version": "production",
+              "num_tables": 6,
+              "file_size": 65536
+            }
+          ],
+          "result_info": {
+            "page": 1,
+            "per_page": 100,
+            "count": 1,
+            "total_count": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/domains?service=furea",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": [
+            {
+              "id": "ID_5",
+              "zone_id": "ID_4",
+              "zone_name": "host-1.example.com",
+              "hostname": "host-2.example.com",
+              "service": "furea",
+              "environment": "production",
+              "cert_id": "ID_7"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://myteam.cloudflareaccess.com/cdn-cgi/access/certs"
+      },
+      "response": {
+        "status": 404,
+        "body": "Not Found"
+      }
+    }
+  ]
+}

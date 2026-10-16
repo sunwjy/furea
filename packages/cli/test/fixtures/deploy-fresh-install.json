@@ -543,6 +543,25 @@
     },
     {
       "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer analytics-token-value"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_10",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
         "method": "PUT",
         "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/secrets",
         "authorization": "Bearer TOKEN"

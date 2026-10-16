@@ -1,0 +1,146 @@
+{
+  "token": "TOKEN",
+  "accountId": "ACCOUNT_ID",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_9",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/settings",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "bindings": [
+              {
+                "type": "d1",
+                "name": "DB",
+                "id": "ID_1"
+              },
+              {
+                "type": "kv_namespace",
+                "name": "KV",
+                "namespace_id": "ID_2"
+              },
+              {
+                "type": "assets",
+                "name": "ASSETS"
+              },
+              {
+                "type": "analytics_engine",
+                "name": "CLICKS",
+                "dataset": "furea_clicks"
+              },
+              {
+                "type": "ratelimit",
+                "name": "LOGIN_IP_LIMITER",
+                "namespace_id": "730016001",
+                "simple": {
+                  "limit": 5,
+                  "period": 60
+                }
+              },
+              {
+                "type": "ratelimit",
+                "name": "LOGIN_GLOBAL_LIMITER",
+                "namespace_id": "730016002",
+                "simple": {
+                  "limit": 30,
+                  "period": 60
+                }
+              },
+              {
+                "type": "plain_text",
+                "name": "FUREA_VERSION",
+                "text": "0.2.0"
+              },
+              {
+                "type": "plain_text",
+                "name": "FUREA_ACCOUNT_ID",
+                "text": "ACCOUNT_ID"
+              }
+            ],
+            "compatibility_date": "2026-09-01",
+            "compatibility_flags": [
+              "nodejs_compat"
+            ],
+            "logpush": false,
+            "observability": {
+              "enabled": true,
+              "head_sampling_rate": 1
+            },
+            "tags": [],
+            "tail_consumers": null,
+            "usage_model": "standard"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        "authorization": "Bearer ANALYTICS_TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "id": "ID_10",
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PUT",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/furea/secrets",
+        "authorization": "Bearer TOKEN",
+        "body": {
+          "name": "ANALYTICS_TOKEN",
+          "text": "ANALYTICS_TOKEN",
+          "type": "secret_text"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "errors": [],
+          "messages": [],
+          "result": {
+            "name": "ANALYTICS_TOKEN",
+            "type": "secret_text"
+          }
+        }
+      }
+    }
+  ]
+}

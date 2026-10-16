@@ -3,11 +3,13 @@
 import { CreatedApiKey } from "@furea/shared";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
+import { insertCampaign } from "../core/db/campaigns.ts";
 import { insertLink } from "../core/db/links.ts";
 import { SESSION_COOKIE, startSession } from "./session.ts";
 
 const ORIGIN = "https://s.example.com";
 const SLUG = "authz-target";
+const CAMPAIGN = "authzCampgn1";
 
 type CallerKind = "none" | "read" | "write" | "session";
 const CALLERS: CallerKind[] = ["none", "read", "write", "session"];
@@ -61,6 +63,18 @@ const ENDPOINTS: Endpoint[] = [
   { method: "PATCH", path: "/settings", body: { rootDestination: null }, expect: WRITE },
   // Access mode changes authentication; turning it off (already off here) keeps the matrix free of side effects.
   { method: "PATCH", path: "/settings", body: { access: null }, expect: SESSION_ONLY },
+  { method: "GET", path: "/campaigns", expect: ANY_CALLER },
+  { method: "GET", path: `/campaigns/${CAMPAIGN}`, expect: ANY_CALLER },
+  { method: "GET", path: `/campaigns/${CAMPAIGN}/links`, expect: ANY_CALLER },
+  { method: "POST", path: "/campaigns", body: { name: "authz minted", baseUrl: "https://example.com/" }, expect: WRITE },
+  { method: "PATCH", path: `/campaigns/${CAMPAIGN}`, body: {}, expect: WRITE },
+  {
+    method: "POST",
+    path: `/campaigns/${CAMPAIGN}/links`,
+    body: { items: [{ utm: { source: "authz", medium: "m" } }] },
+    expect: WRITE,
+  },
+  { method: "DELETE", path: `/campaigns/${CAMPAIGN}`, expect: WRITE },
   // Logging out and changing the password end sessions, so they run last and with their own session.
 ];
 
@@ -86,6 +100,18 @@ describe("who may call what", () => {
       const expected = endpoint.expect[caller];
       it(`${endpoint.method} ${endpoint.path} as ${caller} → ${expected}`, async () => {
         await insertLink(env.DB, { slug: SLUG, destination: "https://example.com/authz-target" });
+        // Each caller allowed through meets the same campaign state: present, without members, its name free.
+        await env.DB.batch([
+          env.DB.prepare("UPDATE links SET campaign_id = NULL, campaign_utm_key = NULL WHERE campaign_id IS NOT NULL"),
+          env.DB.prepare("DELETE FROM campaigns WHERE id != ?").bind(CAMPAIGN),
+        ]);
+        await insertCampaign(env.DB, {
+          id: CAMPAIGN,
+          name: "authz campaign",
+          utmCampaign: "authz",
+          utmId: null,
+          baseUrl: "https://example.com/authz",
+        });
         const res = await call(endpoint, credentialsOf(caller));
         if (expected === "ok") {
           // The DELETE of an unknown key id is the session's 404: past the authorization check.

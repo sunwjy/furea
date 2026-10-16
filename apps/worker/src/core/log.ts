@@ -10,8 +10,8 @@ export type LogEvent =
   | { event: "redirect_fallback_failed"; slug: string }
   | { event: "click_write_failed"; slug: string; store: "wae" | "d1" }
   | { event: "login_rate_limited"; limiter: "per_client" | "global" }
-  | { event: "screening_overridden"; slug: string }
-  | { event: "screening_unavailable"; slug?: string };
+  | { event: "screening_overridden"; slug?: string; campaign?: string }
+  | { event: "screening_unavailable"; slug?: string; campaign?: string };
 
 type EventName = LogEvent["event"];
 
@@ -22,8 +22,8 @@ const FIELDS: { [E in EventName]: readonly Exclude<keyof Extract<LogEvent, { eve
   redirect_fallback_failed: ["slug"],
   click_write_failed: ["slug", "store"],
   login_rate_limited: ["limiter"],
-  screening_overridden: ["slug"],
-  screening_unavailable: ["slug"],
+  screening_overridden: ["slug", "campaign"],
+  screening_unavailable: ["slug", "campaign"],
 };
 
 const FAILURES: ReadonlySet<EventName> = new Set([

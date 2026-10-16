@@ -3,6 +3,7 @@
 import { Hono } from "hono";
 import { apiKeys } from "./api-keys.ts";
 import { auth } from "./auth.ts";
+import { campaigns } from "./campaigns.ts";
 import type { ApiEnv } from "./context.ts";
 import { logUnhandled } from "../core/log.ts";
 import { repairSyncPending } from "../core/sync.ts";
@@ -34,6 +35,7 @@ v1.use(async (c, next) => {
 v1.route("/auth", auth);
 v1.route("/api-keys", apiKeys);
 v1.route("/", stats);
+v1.route("/campaigns", campaigns);
 v1.route("/links", links);
 v1.route("/password", password);
 v1.route("/settings", settings);

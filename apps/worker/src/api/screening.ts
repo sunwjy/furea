@@ -40,7 +40,9 @@ export async function screen(
   return unavailable ? "unavailable" : "passed";
 }
 
-export function logScreening(outcome: ScreeningOutcome, slug: string): void {
-  if (outcome === "overridden") log({ event: "screening_overridden", slug });
-  else if (outcome === "unavailable") log({ event: "screening_unavailable", slug });
+/** `subject` is the slug written (`_` for the root destination), or the campaign created. */
+export function logScreening(outcome: ScreeningOutcome, subject: string | { campaign: string }): void {
+  const fields = typeof subject === "string" ? { slug: subject } : subject;
+  if (outcome === "overridden") log({ event: "screening_overridden", ...fields });
+  else if (outcome === "unavailable") log({ event: "screening_unavailable", ...fields });
 }

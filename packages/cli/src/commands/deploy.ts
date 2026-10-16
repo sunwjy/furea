@@ -11,14 +11,15 @@ import { readAssets, syncAssets, type AssetSync } from "../assets.ts";
 import { type Binding, CloudflareApiError, CloudflareClient } from "../cloudflare/client.ts";
 import type { CommandContext } from "../context.ts";
 import { resolveDeployCredentials } from "../credentials.ts";
-import { analyticsTokenTemplateUrl, verifyDeployToken } from "../deploy-token.ts";
-import { ask, CliError, step } from "../io.ts";
+import { verifyDeployToken } from "../deploy-token.ts";
+import { CliError, step } from "../io.ts";
 import { ANALYTICS_ENGINE_DOCS } from "../links.ts";
 import { HOSTNAME_CHOICE_FLAGS, type HostnameChoice, resolveHostname } from "../hostname.ts";
 import { applyMigrations } from "../migrations.ts";
 import type { Installer } from "../package-files.ts";
 import { deployUpdateLine, latestRelease } from "../update-check.ts";
 import { isNewer } from "../version.ts";
+import { pasteAnalyticsToken, storeAnalyticsToken } from "./analytics-token.ts";
 import { login } from "./login.ts";
 
 export interface DeployOptions {
@@ -47,7 +48,8 @@ const ASSETS_CONFIG = { not_found_handling: "none" };
 /** Wrangler's error code for an upload carrying an `analytics_engine` binding on an account without it (ADR 0006). */
 const ANALYTICS_ENGINE_DISABLED = 10089;
 
-const PASSWORD_LENGTH = 24;
+/** ADR 0003: 24 characters from the slug alphabet. */
+export const OPERATOR_PASSWORD_LENGTH = 24;
 
 export async function deploy(ctx: CommandContext, options: DeployOptions): Promise<void> {
   const { io, name } = ctx;
@@ -148,7 +150,7 @@ export async function deploy(ctx: CommandContext, options: DeployOptions): Promi
   const url = await resolveHostname(ctx, client, accountId, options.hostname, deployed !== undefined);
 
   // 9. Operator password, once: the insert does nothing when a hash is already stored.
-  const password = randomAlphabetString(PASSWORD_LENGTH);
+  const password = randomAlphabetString(OPERATOR_PASSWORD_LENGTH);
   const [inserted] = await client.d1Query(
     accountId,
     database.uuid,
@@ -223,18 +225,19 @@ async function offerAnalyticsToken(ctx: CommandContext, client: CloudflareClient
   let token = ctx.env.FUREA_ANALYTICS_TOKEN;
   if (!token && io.interactive) {
     const answer = (await io.prompt("Set the analytics token now? It enables click breakdowns. [y/N] ")).trim().toLowerCase();
-    if (answer === "y" || answer === "yes") {
-      const url = analyticsTokenTemplateUrl("user");
-      io.out("Create a read-only analytics token with the pre-filled form (opening it in your browser):");
-      io.out(`  ${url}`);
-      await io.openUrl(url);
-      token = await ask(io, "Paste the analytics token: ", "FUREA_ANALYTICS_TOKEN", { secret: true });
-    }
+    if (answer === "y" || answer === "yes") token = await pasteAnalyticsToken(ctx, "user");
   }
   if (!token) {
     step(io, "analytics-token", "skip", "add it later with: npx furea analytics-token");
     return;
   }
-  await client.putSecret(accountId, ctx.name, "ANALYTICS_TOKEN", token);
+  try {
+    await storeAnalyticsToken(ctx, client, accountId, token);
+  } catch (error) {
+    // The instance is installed by now; a bad analytics token must not turn the install into a failure.
+    if (!(error instanceof CliError)) throw error;
+    step(io, "analytics-token", "skip", `${error.message} Add it later with: npx furea analytics-token`);
+    return;
+  }
   step(io, "analytics-token", "create", "stored as the ANALYTICS_TOKEN secret");
 }

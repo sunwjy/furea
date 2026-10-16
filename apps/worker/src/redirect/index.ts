@@ -2,9 +2,11 @@
 
 import { isCustomSlug, isReservedPath } from "@furea/shared";
 import { Hono } from "hono";
+import { recordClick } from "../core/clicks.ts";
 import { cacheEntryOf, readCacheEntry, ROOT_CACHE_KEY, writeCacheEntry } from "../core/cache.ts";
 import { getLink } from "../core/db/links.ts";
 import type { Env } from "../core/env.ts";
+import { clickFactsOf } from "./click-facts.ts";
 import { methodNotAllowed, redirectTo, robotsTxt, unknownSlug } from "./responses.ts";
 
 export const redirect = new Hono<{ Bindings: Env }>();
@@ -36,6 +38,8 @@ redirect.get("*", async (c) => {
     c.executionCtx.waitUntil(writeCacheEntry(c.env.KV, segment, entry).catch(() => {}));
   }
   if (entry.disabled) return unknownSlug();
+  // Every answered redirect is a click, HEAD included (Hono runs this route for HEAD). Only the facts leave here.
+  c.executionCtx.waitUntil(recordClick(c.env, clickFactsOf(c.req.raw, segment)));
   return redirectTo(entry.to);
 });
 

@@ -161,7 +161,15 @@ test("5. create an API key, call the API with it, and revoke it", async () => {
   await script.dispose();
 });
 
-test("6. set a root destination on the Settings page, land on it from /, and unset it", async () => {
+test("6. see each link's lifetime total on its feed card", async () => {
+  // Flow 3 opened the short URL twice (once without following, once in the browser); the link has been disabled
+  // since flow 4 and keeps its total.
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Links" }).click();
+  const card = page.getByRole("list", { name: "Links" }).getByRole("listitem").filter({ hasText: `/${SLUG}` });
+  await expect(card.getByText("2 clicks", { exact: true })).toBeVisible();
+});
+
+test("7. set a root destination on the Settings page, land on it from /, and unset it", async () => {
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await expect(page.getByText("npx furea@latest deploy")).toBeVisible();

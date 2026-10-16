@@ -131,6 +131,9 @@ function LinkCard({ link }: { link: LinkResource }) {
               {link.shortUrl.replace(/^https?:\/\//, "")}
             </a>
             <LinkBadges link={link} />
+            <span className="text-sm text-muted-foreground" title="Lifetime total">
+              {link.clickCount === 1 ? "1 click" : `${link.clickCount.toLocaleString()} clicks`}
+            </span>
           </div>
           <Link
             to="/links/$slug"

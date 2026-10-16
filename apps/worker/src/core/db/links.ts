@@ -26,6 +26,11 @@ export async function getLink(db: D1Database, slug: string): Promise<LinkRow | n
   return db.prepare(`SELECT ${COLUMNS} FROM links WHERE slug = ?`).bind(slug).first<LinkRow>();
 }
 
+/** Adds one click to the link's lifetime total (ADR 0005). An unknown slug changes nothing. */
+export async function incrementClickCount(db: D1Database, slug: string): Promise<void> {
+  await db.prepare("UPDATE links SET click_count = click_count + 1 WHERE slug = ?").bind(slug).run();
+}
+
 /** Inserts a link unless its slug is taken; returns whether it did. A taken slug is never overwritten. */
 export async function insertLink(db: D1Database, link: NewLink): Promise<boolean> {
   const now = (link.now ?? new Date()).toISOString();

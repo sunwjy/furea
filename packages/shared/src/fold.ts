@@ -23,3 +23,26 @@ export interface UtmCombination {
 export function campaignUtmKey({ source, medium, content, term }: UtmCombination): string {
   return JSON.stringify([source, medium, content ?? "", term ?? ""].map(foldKey));
 }
+
+export interface FoldGroup<T> {
+  key: string;
+  /** The first member's value, trimmed, case kept. */
+  label: string;
+  members: T[];
+}
+
+/**
+ * Groups rows by the fold key of one value, in order of first appearance: the campaign comparison's fold by source or
+ * by medium (ADR 0005), read from the links' current UTM values.
+ */
+export function groupByFoldKey<T>(rows: readonly T[], value: (row: T) => string): FoldGroup<T>[] {
+  const groups = new Map<string, FoldGroup<T>>();
+  for (const row of rows) {
+    const raw = value(row);
+    const key = foldKey(raw);
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, { key, label: raw.trim(), members: [row] });
+    else group.members.push(row);
+  }
+  return [...groups.values()];
+}

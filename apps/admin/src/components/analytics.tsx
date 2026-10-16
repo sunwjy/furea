@@ -1,7 +1,7 @@
 // Click breakdown widgets (ADR 0005): tiles, sparklines, the bar series and top lists, every WAE-derived number
 // labelled as a last-90-days estimate, plus the degraded-mode hint naming what is missing.
 
-import type { SeriesPoint, StatsRange } from "@furea/shared";
+import { STATS_RANGES, type SeriesPoint, type StatsRange } from "@furea/shared";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,41 @@ export function BarSeries({ points, range }: { points: SeriesPoint[]; range: Sta
         </li>
       ))}
     </ol>
+  );
+}
+
+export const RANGE_LABELS: Record<StatsRange, string> = {
+  "24h": "24 hours",
+  "7d": "7 days",
+  "30d": "30 days",
+  "90d": "90 days",
+};
+
+export function RangeTabs({ range, onChange }: { range: StatsRange; onChange: (range: StatsRange) => void }) {
+  return (
+    <div role="tablist" aria-label="Range" className="flex gap-1">
+      {STATS_RANGES.map((r) => (
+        <Button
+          key={r}
+          role="tab"
+          aria-selected={r === range}
+          variant={r === range ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => onChange(r)}
+        >
+          {RANGE_LABELS[r]}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+/** A row's share of the busiest row, for comparing rows of a table; decorative, the number sits next to it. */
+export function ComparisonBar({ value, max }: { value: number; max: number }) {
+  return (
+    <span aria-hidden className="inline-block h-1.5 w-20 overflow-hidden rounded-full bg-muted align-middle">
+      <span className="block h-full rounded-full bg-primary" style={{ width: `${(value / Math.max(1, max)) * 100}%` }} />
+    </span>
   );
 }
 

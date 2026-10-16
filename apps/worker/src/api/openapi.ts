@@ -8,6 +8,7 @@ import {
   Campaign,
   CampaignLinks,
   CampaignPage,
+  CampaignStats,
   ChangePasswordRequest,
   CreateCampaignRequest,
   CreateApiKeyRequest,
@@ -323,6 +324,17 @@ const OPERATIONS: Operation[] = [
   },
   {
     method: "get",
+    path: "/campaigns/{id}/stats",
+    summary:
+      "A campaign's click breakdowns over its current members, read at query time: the combined series and top " +
+      "lists shaped like a link's, and bySlug with every current member's range clicks and series, zero-filled. " +
+      "Last 90 days, estimated. 503 analytics_unavailable when breakdowns are not configured.",
+    parameters: [CAMPAIGN_ID_PARAMETER, ...queryParameters(StatsQuery)],
+    success: { status: 200, description: "The campaign's breakdowns.", schema: "CampaignStats" },
+    errors: [400, 401, 404, 503],
+  },
+  {
+    method: "get",
     path: "/openapi.json",
     summary: "This document.",
     public: true,
@@ -378,6 +390,7 @@ export function buildOpenApiDocument(version: string): JsonSchema {
           Campaign,
           CampaignLinks,
           CampaignPage,
+          CampaignStats,
           CreatedApiKey,
           ErrorDetail,
           ErrorEnvelope,

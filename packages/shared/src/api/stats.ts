@@ -78,3 +78,16 @@ export const InstanceStats = z
   })
   .describe(ESTIMATE);
 export type InstanceStats = z.infer<typeof InstanceStats>;
+
+/**
+ * `GET /campaigns/:id/stats` (ADR 0009, *Campaign stats*): the link shape combined over the campaign's current
+ * members, plus `bySlug` holding every current member, zero-filled, so the comparison's rows are complete.
+ */
+export const CampaignStats = z
+  .object({
+    ...LinkStats.shape,
+    /** Every current member: its clicks in the range and its series, zero-filled like a link's. */
+    bySlug: z.record(z.string(), z.object({ clicks: z.number(), series: z.array(SeriesPoint) })),
+  })
+  .describe(ESTIMATE);
+export type CampaignStats = z.infer<typeof CampaignStats>;

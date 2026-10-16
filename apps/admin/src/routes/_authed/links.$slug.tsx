@@ -1,6 +1,5 @@
 import {
   Destination,
-  STATS_RANGES,
   Title,
   type Link as LinkResource,
   type StatsRange,
@@ -14,7 +13,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { AnalyticsHint, BarSeries, ESTIMATE_LABEL, TopList } from "@/components/analytics";
+import { AnalyticsHint, BarSeries, ESTIMATE_LABEL, RangeTabs, TopList } from "@/components/analytics";
 import { EnableToggle, LinkBadges, SyncPendingNotice, useUpdateLink } from "@/components/link-status";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -96,8 +95,6 @@ function LinkDetails({ link }: { link: LinkResource }) {
   );
 }
 
-const RANGE_LABELS: Record<StatsRange, string> = { "24h": "24 hours", "7d": "7 days", "30d": "30 days", "90d": "90 days" };
-
 /** The link's breakdowns for a range (ADR 0005), or the degraded hint; the lifetime total above stays either way. */
 function LinkAnalytics({ slug }: { slug: string }) {
   const [range, setRange] = useState<StatsRange>("7d");
@@ -110,20 +107,7 @@ function LinkAnalytics({ slug }: { slug: string }) {
     <section aria-label="Clicks" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-base font-semibold">Clicks</h2>
-        <div role="tablist" aria-label="Range" className="flex gap-1">
-          {STATS_RANGES.map((r) => (
-            <Button
-              key={r}
-              role="tab"
-              aria-selected={r === range}
-              variant={r === range ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setRange(r)}
-            >
-              {RANGE_LABELS[r]}
-            </Button>
-          ))}
-        </div>
+        <RangeTabs range={range} onChange={setRange} />
       </div>
       <p className="text-xs text-muted-foreground">
         {ESTIMATE_LABEL}, in {browserTimeZone()} {range === "24h" ? "hours" : "days"}.

@@ -9,8 +9,8 @@ import { type Bucket, dailyBuckets, rangeBuckets, rangeInterval, sqlDateTime } f
 import { createSqlClient, type SqlClient, type SqlRow, sqlString } from "./sql-client.ts";
 
 /** The dataset of the `CLICKS` binding (ADR 0005, manifest). */
-const DATASET = "furea_clicks";
-const TOP = 10;
+export const DATASET = "furea_clicks";
+export const TOP = 10;
 
 export type AnalyticsMissing = "binding" | "token";
 
@@ -37,11 +37,11 @@ export interface StatsRequest {
   now: Date;
 }
 
-const bucketColumn = (range: StatsRange, tz: string) =>
+export const bucketColumn = (range: StatsRange, tz: string) =>
   `toStartOfInterval(timestamp, ${rangeInterval(range)}, ${sqlString(tz)}) AS bucket`;
 
 /** `series` over every bucket of the range, empty ones as 0, buckets wholly before `since` dropped to 0 too. */
-function zeroFilled(buckets: Bucket[], rows: SqlRow[], sinceMs = -Infinity): SeriesPoint[] {
+export function zeroFilled(buckets: Bucket[], rows: SqlRow[], sinceMs = -Infinity): SeriesPoint[] {
   const clicks = new Map(rows.map((row) => [String(row["bucket"]), Number(row["clicks"])]));
   return buckets.map((b) => ({ start: b.start, clicks: b.endMs > sinceMs ? (clicks.get(b.key) ?? 0) : 0 }));
 }

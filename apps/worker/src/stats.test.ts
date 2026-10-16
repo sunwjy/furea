@@ -1,12 +1,13 @@
 // The stats resources (ADR 0009, *Stats*; ADR 0005) through the Worker's fetch, with the Analytics Engine SQL API
 // replaced by an injected fetch that answers canned SQL API responses (docs/testing.md).
 
-import { InstanceStats, LinkStats } from "@furea/shared";
+import { CampaignStats, campaignUtmKey, InstanceStats, LinkStats } from "@furea/shared";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "./core/env.ts";
-import { insertLink } from "./core/db/links.ts";
+import { insertCampaign } from "./core/db/campaigns.ts";
+import { insertCampaignLinks, insertLink } from "./core/db/links.ts";
 import { createWorker } from "./index.ts";
 import { SESSION_COOKIE, startSession } from "./api/session.ts";
 
@@ -229,6 +230,164 @@ describe("GET /api/v1/stats", () => {
   });
 });
 
+describe("GET /api/v1/campaigns/:id/stats", () => {
+  const CAMPAIGN = "cmpstats0001";
+
+  /** One link's clicks as Analytics Engine holds them: per Seoul day, with the fact each click carried. */
+  interface Clicks {
+    bucket: string;
+    clicks: number;
+    country: string;
+    host: string;
+    deviceClass: string;
+  }
+
+  /**
+   * A fake SQL API that holds clicks per slug and answers only for the slugs bound in the statement, so what a
+   * response contains follows the campaign's current membership, read at query time.
+   */
+  function clickStore(store: Record<string, Clicks[]>) {
+    const statements: string[] = [];
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const sql = await new Request(input, init).text();
+      statements.push(sql);
+      const bound = Object.keys(store).filter((slug) => sql.includes(`(index1 = '${slug}' AND`));
+      const facts = bound.flatMap((slug) => (store[slug] ?? []).map((c) => ({ slug, ...c })));
+      let rows: Record<string, string | number>[];
+      if (sql.includes("GROUP BY slug, bucket")) {
+        rows = facts.map(({ slug, bucket, clicks }) => ({ slug, bucket, clicks: String(clicks), rows_read: "1" }));
+      } else {
+        const column = (["country", "host", "deviceClass"] as const).find((c) => sql.includes(`AS ${c},`)) ?? "country";
+        const sums = new Map<string, number>();
+        for (const fact of facts) sums.set(fact[column], (sums.get(fact[column]) ?? 0) + fact.clicks);
+        rows = [...sums]
+          .sort((a, b) => b[1] - a[1])
+          .map(([value, clicks]) => ({ [column]: value, clicks: String(clicks), rows_read: "1" }));
+      }
+      const meta = Object.keys(rows[0] ?? {}).map((name) => ({
+        name,
+        type: name === "clicks" || name === "rows_read" ? "UInt64" : "String",
+      }));
+      return Response.json({ meta, data: rows, rows: rows.length });
+    }) as typeof globalThis.fetch;
+    return { fetch, statements };
+  }
+
+  const STORE: Record<string, Clicks[]> = {
+    "spring-ig": [
+      { bucket: "2026-10-12 00:00:00", clicks: 4, country: "KR", host: "www.instagram.com", deviceClass: "mobile" },
+    ],
+    "spring-fb": [
+      { bucket: "2026-10-16 00:00:00", clicks: 2, country: "US", host: "l.facebook.com", deviceClass: "desktop" },
+    ],
+    // A plain link with clicks from before it was ever in the campaign.
+    loose: [{ bucket: "2026-10-11 00:00:00", clicks: 5, country: "KR", host: "direct", deviceClass: "mobile" }],
+  };
+
+  const week = (values: Record<number, number>) => SEOUL_WEEK.map((start, i) => ({ start, clicks: values[i] ?? 0 }));
+  const member = (slug: string, source: string, created: string) => ({
+    slug,
+    destination: `https://example.com/spring?utm_source=${source}`,
+    title: null,
+    utmKey: campaignUtmKey({ source, medium: "social" }),
+    now: new Date(created),
+  });
+
+  beforeEach(async () => {
+    await env.DB.exec("DELETE FROM links");
+    await env.DB.exec("DELETE FROM campaigns");
+    await insertCampaign(env.DB, {
+      id: CAMPAIGN,
+      name: "Spring stats",
+      utmCampaign: "spring",
+      utmId: null,
+      baseUrl: "https://example.com/spring",
+    });
+    await insertCampaignLinks(env.DB, CAMPAIGN, [
+      member("spring-ig", "instagram", "2026-10-01T08:15:30.000Z"),
+      member("spring-fb", "facebook", "2026-10-12T00:00:00.000Z"),
+      member("spring-x", "x", "2026-10-13T00:00:00.000Z"),
+    ]);
+    await insertLink(env.DB, { slug: "loose", destination: "https://example.com/spring?utm_source=news", now: new Date("2026-09-01T00:00:00Z") });
+  });
+
+  it("returns the combined series and top lists, and every current member under bySlug, zero-filled", async () => {
+    const api = clickStore(STORE);
+
+    const res = await get(`/campaigns/${CAMPAIGN}/stats?range=7d&tz=Asia/Seoul`, { fetch: api.fetch });
+
+    expect(res.status).toBe(200);
+    expect(CampaignStats.parse(await res.json())).toEqual({
+      range: "7d",
+      tz: "Asia/Seoul",
+      series: week({ 2: 4, 6: 2 }),
+      countries: [{ country: "KR", clicks: 4 }, { country: "US", clicks: 2 }],
+      referrerHosts: [{ host: "www.instagram.com", clicks: 4 }, { host: "l.facebook.com", clicks: 2 }],
+      deviceClasses: [{ deviceClass: "mobile", clicks: 4 }, { deviceClass: "desktop", clicks: 2 }],
+      bySlug: {
+        "spring-ig": { clicks: 4, series: week({ 2: 4 }) },
+        "spring-fb": { clicks: 2, series: week({ 6: 2 }) },
+        "spring-x": { clicks: 0, series: week({}) },
+      },
+    });
+    expect(api.statements).toHaveLength(4);
+    expect(api.statements[0]).toContain("(index1 = 'spring-ig' AND timestamp >= toDateTime('2026-10-01 08:15:30'))");
+  });
+
+  it("brings an adopted link's earlier clicks in and takes a detached link's out, by current membership", async () => {
+    // Adopt `loose` and detach `spring-ig` the way the campaign-membership writes leave the rows.
+    await env.DB.prepare("UPDATE links SET campaign_id = ?, campaign_utm_key = ? WHERE slug = 'loose'")
+      .bind(CAMPAIGN, campaignUtmKey({ source: "news", medium: "social" }))
+      .run();
+    await env.DB.exec("UPDATE links SET campaign_id = NULL, campaign_utm_key = NULL WHERE slug = 'spring-ig'");
+
+    const body = CampaignStats.parse(
+      await (await get(`/campaigns/${CAMPAIGN}/stats?range=7d&tz=Asia/Seoul`, { fetch: clickStore(STORE).fetch })).json(),
+    );
+
+    expect(body.series).toEqual(week({ 1: 5, 6: 2 }));
+    expect(body.countries).toEqual([{ country: "KR", clicks: 5 }, { country: "US", clicks: 2 }]);
+    expect(Object.keys(body.bySlug).sort()).toEqual(["loose", "spring-fb", "spring-x"]);
+    expect(body.bySlug["loose"]).toEqual({ clicks: 5, series: week({ 1: 5 }) });
+  });
+
+  it("answers an empty campaign with zeros and no Analytics Engine query", async () => {
+    await env.DB.exec("UPDATE links SET campaign_id = NULL, campaign_utm_key = NULL");
+    const api = clickStore(STORE);
+
+    const body = CampaignStats.parse(await (await get(`/campaigns/${CAMPAIGN}/stats?tz=Asia/Seoul`, { fetch: api.fetch })).json());
+
+    expect(body).toEqual({
+      range: "7d",
+      tz: "Asia/Seoul",
+      series: week({}),
+      countries: [],
+      referrerHosts: [],
+      deviceClasses: [],
+      bySlug: {},
+    });
+    expect(api.statements).toEqual([]);
+  });
+
+  it("leaves campaigns out of the instance overview: no campaign field and no campaign query", async () => {
+    const api = clickStore(STORE);
+
+    const body = await (await get("/stats?tz=Asia/Seoul", { fetch: api.fetch })).json();
+
+    expect(Object.keys(body as object).sort()).toEqual(
+      ["last30d", "last7d", "linkCount", "range", "seriesBySlug", "today", "topLinks", "tz"],
+    );
+    expect(api.statements.join("\n")).not.toMatch(/campaign/i);
+  });
+
+  it("answers 404 for an unknown campaign without querying Analytics Engine", async () => {
+    const api = clickStore(STORE);
+    const res = await get("/campaigns/no-such-campaign/stats", { fetch: api.fetch });
+    expect(res.status).toBe(404);
+    expect(api.statements).toEqual([]);
+  });
+});
+
 describe("GET /api/v1/settings", () => {
   it.each([
     ["configured", [], true, []],
@@ -242,7 +401,7 @@ describe("GET /api/v1/settings", () => {
 });
 
 describe("without breakdowns configured", () => {
-  for (const path of ["/stats", "/links/whatever/stats"]) {
+  for (const path of ["/stats", "/links/whatever/stats", "/campaigns/whatever/stats"]) {
     it(`GET ${path} answers 503 analytics_unavailable naming the missing token`, async () => {
       const api = sqlApi([]);
       const res = await get(path, { fetch: api.fetch, drop: ["ANALYTICS_TOKEN"] });

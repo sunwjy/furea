@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InstanceStats, LinkStats, StatsQuery } from "./stats.ts";
+import { CampaignStats, InstanceStats, LinkStats, StatsQuery } from "./stats.ts";
 
 function codes(result: { success: boolean; error?: { issues: { path: PropertyKey[]; code: string; params?: unknown }[] } }) {
   return (
@@ -68,5 +68,20 @@ describe("stats responses", () => {
       seriesBySlug: { abc: [{ start: "2026-10-16T00:00:00Z", clicks: 2 }] },
     };
     expect(InstanceStats.parse(doc)).toEqual(doc);
+  });
+
+  it("parses a campaign's breakdowns, every member under bySlug", () => {
+    const series = [{ start: "2026-10-16T00:00:00Z", clicks: 2 }];
+    const doc = {
+      range: "7d",
+      tz: "UTC",
+      series,
+      countries: [{ country: "KR", clicks: 2 }],
+      referrerHosts: [{ host: "direct", clicks: 2 }],
+      deviceClasses: [{ deviceClass: "desktop", clicks: 2 }],
+      bySlug: { "spring-ig": { clicks: 2, series }, "spring-fb": { clicks: 0, series: [{ ...series[0], clicks: 0 }] } },
+    };
+    expect(CampaignStats.parse(doc)).toEqual(doc);
+    expect(CampaignStats.safeParse({ ...doc, bySlug: { a: { series } } }).success).toBe(false);
   });
 });

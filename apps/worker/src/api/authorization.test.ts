@@ -66,6 +66,7 @@ const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/campaigns", expect: ANY_CALLER },
   { method: "GET", path: `/campaigns/${CAMPAIGN}`, expect: ANY_CALLER },
   { method: "GET", path: `/campaigns/${CAMPAIGN}/links`, expect: ANY_CALLER },
+  { method: "GET", path: `/campaigns/${CAMPAIGN}/stats`, expect: ANY_CALLER },
   { method: "POST", path: "/campaigns", body: { name: "authz minted", baseUrl: "https://example.com/" }, expect: WRITE },
   { method: "PATCH", path: `/campaigns/${CAMPAIGN}`, body: {}, expect: WRITE },
   {

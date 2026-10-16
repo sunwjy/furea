@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { campaignUtmKey, foldKey } from "./fold.ts";
+import { campaignUtmKey, foldKey, groupByFoldKey } from "./fold.ts";
 
 // ADR 0016: the meaning of "compared case-insensitively" for campaign names and UTM combinations.
 describe("foldKey", () => {
@@ -42,5 +42,26 @@ describe("campaignUtmKey", () => {
       campaignUtmKey({ source: 'a","b', medium: "c" }),
     ];
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+// ADR 0005: the campaign comparison folds its rows by source or by medium, case-insensitively, from the rows it has.
+describe("groupByFoldKey", () => {
+  const links = [
+    { slug: "a", source: "Newsletter" },
+    { slug: "b", source: "instagram" },
+    { slug: "c", source: " newsletter " },
+    { slug: "d", source: "NEWSLETTER" },
+  ];
+
+  it("groups by fold key in order of first appearance, labelled with the first member's trimmed value", () => {
+    expect(groupByFoldKey(links, (l) => l.source)).toEqual([
+      { key: "newsletter", label: "Newsletter", members: [links[0], links[2], links[3]] },
+      { key: "instagram", label: "instagram", members: [links[1]] },
+    ]);
+  });
+
+  it("returns no groups for no rows", () => {
+    expect(groupByFoldKey([], (l: { source: string }) => l.source)).toEqual([]);
   });
 });

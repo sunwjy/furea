@@ -285,3 +285,30 @@ test("10. create a campaign, add two links in the row editor, and land on a comp
   const row = page.getByRole("table", { name: "Campaigns" }).getByRole("row").filter({ hasText: "E2E Spring" });
   await expect(row.getByRole("cell")).toHaveText(["E2E Spring", "E2E Spring", "2", "2"]);
 });
+
+test("11. open the campaign page without an analytics token: lifetime total and comparison, folded by medium", async () => {
+  const res = await page.request.get("/api/v1/campaigns?q=E2E%20Spring");
+  const id = ((await res.json()) as { items: { id: string }[] }).items[0]?.id ?? "";
+  const stats = await page.request.get(`/api/v1/campaigns/${id}/stats?range=7d&tz=Asia/Seoul`);
+  expect(stats.status()).toBe(503);
+  expect(await stats.json()).toMatchObject({ error: { code: "analytics_unavailable" } });
+
+  await page.goto(`/admin/campaigns/${id}`);
+  await expect(page.getByRole("heading", { name: "E2E Spring" })).toBeVisible();
+  await expect(page.getByRole("note", { name: "Estimates unavailable" })).toContainText("no analytics token");
+  await expect(page.getByRole("tablist", { name: "Range" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Clicks" })).toHaveCount(0);
+  // The combined lifetime total (the two visits of flow 10) stays, and the comparison runs on lifetime totals.
+  const overview = page.getByLabel("Overview");
+  await expect(overview.getByRole("definition").first()).toHaveText("2");
+  await expect(page.getByRole("table", { name: "Links" }).getByRole("row").filter({ hasText: "/e2e-spring-news" }).getByRole("cell").last()).toHaveText("2");
+
+  // Folded by medium from the rows at hand, ignoring case.
+  await page.getByRole("tablist", { name: "Fold" }).getByRole("tab", { name: "By medium" }).click();
+  const byMedium = page.getByRole("table", { name: "Links by medium" });
+  await expect(byMedium.getByRole("row")).toHaveCount(3);
+  await expect(byMedium.getByRole("row").nth(1).getByRole("cell")).toHaveText(["email", "1", "2"]);
+  await expect(byMedium.getByRole("row").nth(2).getByRole("cell")).toHaveText(["social", "1", "0"]);
+  await page.getByRole("tab", { name: "By source" }).click();
+  await expect(page.getByRole("table", { name: "Links by source" }).getByRole("row").nth(1)).toContainText("Newsletter");
+});

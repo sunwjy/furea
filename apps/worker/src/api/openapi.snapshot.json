@@ -953,6 +953,64 @@
         }
       }
     },
+    "/campaigns/{id}/stats": {
+      "get": {
+        "summary": "A campaign's click breakdowns over its current members, read at query time: the combined series and top lists shaped like a link's, and bySlug with every current member's range clicks and series, zero-filled. Last 90 days, estimated. 503 analytics_unavailable when breakdowns are not configured.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "24h (hourly buckets), 7d, 30d or 90d (daily buckets).",
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "The IANA time zone that day and hour boundaries follow, usually the browser's.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The campaign's breakdowns.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "summary": "This document.",
@@ -1430,6 +1488,145 @@
           "items",
           "nextCursor"
         ]
+      },
+      "CampaignStats": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d"
+            ]
+          },
+          "tz": {
+            "type": "string"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "start",
+                "clicks"
+              ]
+            }
+          },
+          "countries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "country": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "country",
+                "clicks"
+              ]
+            }
+          },
+          "referrerHosts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "host",
+                "clicks"
+              ]
+            }
+          },
+          "deviceClasses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "deviceClass": {
+                  "type": "string"
+                },
+                "clicks": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "deviceClass",
+                "clicks"
+              ]
+            }
+          },
+          "bySlug": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "clicks": {
+                  "type": "number"
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      "clicks": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "clicks"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "clicks",
+                "series"
+              ]
+            }
+          }
+        },
+        "required": [
+          "range",
+          "tz",
+          "series",
+          "countries",
+          "referrerHosts",
+          "deviceClasses",
+          "bySlug"
+        ],
+        "description": "Last 90 days, estimated from Analytics Engine with sum(_sample_interval)."
       },
       "CreatedApiKey": {
         "type": "object",

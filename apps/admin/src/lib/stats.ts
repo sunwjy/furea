@@ -1,9 +1,10 @@
 // The stats resources as seen by the admin surface (ADR 0009, *Stats*): click breakdowns in the browser's time zone,
 // and what is missing when the instance answers 503 analytics_unavailable.
 
-import { InstanceStats, LinkStats, type StatsRange } from "@furea/shared";
+import { CampaignStats, InstanceStats, LinkStats, type StatsRange } from "@furea/shared";
 import { queryOptions } from "@tanstack/react-query";
 import { ApiError, apiJson } from "./api.ts";
+import { CAMPAIGNS_KEY } from "./campaigns.ts";
 
 /** Day and hour boundaries follow the browser's zone (ADR 0005). */
 export const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -36,6 +37,15 @@ export function linkStatsQuery(slug: string, range: StatsRange) {
   return queryOptions({
     queryKey: ["stats", "link", slug, range],
     queryFn: () => apiJson(`/links/${encodeURIComponent(slug)}/stats?${query(range)}`, LinkStats),
+    retry,
+  });
+}
+
+/** Under the campaigns' key, so a membership change (any campaign write) refetches the breakdowns. */
+export function campaignStatsQuery(id: string, range: StatsRange) {
+  return queryOptions({
+    queryKey: [...CAMPAIGNS_KEY, "stats", id, range],
+    queryFn: () => apiJson(`/campaigns/${encodeURIComponent(id)}/stats?${query(range)}`, CampaignStats),
     retry,
   });
 }

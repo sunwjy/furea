@@ -1,8 +1,16 @@
-import { CAMPAIGN_LINK_LIMIT, type Campaign } from "@furea/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CAMPAIGN_LINK_LIMIT,
+  groupByFoldKey,
+  type Campaign,
+  type CampaignStats,
+  type FoldGroup,
+  type Link as LinkResource,
+  type StatsRange,
+} from "@furea/shared";
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -14,12 +22,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  AnalyticsHint,
+  BarSeries,
+  ComparisonBar,
+  ESTIMATE_LABEL,
+  RANGE_LABELS,
+  RangeTabs,
+  Tiles,
+  TopList,
+} from "@/components/analytics";
 import { LinkBadges } from "@/components/link-status";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { CAMPAIGNS_KEY, campaignLinksQuery, campaignQuery, deleteCampaign } from "@/lib/campaigns";
 import { LINKS_KEY } from "@/lib/links";
+import { analyticsMissing, browserTimeZone, campaignStatsQuery } from "@/lib/stats";
 
 export const Route = createFileRoute("/_authed/campaigns/$id/")({
   component: CampaignPage,
@@ -46,7 +65,7 @@ function CampaignPage() {
       ) : (
         <>
           <CampaignHeader campaign={campaign.data} />
-          <CampaignLinksTable campaign={campaign.data} />
+          <CampaignBody campaign={campaign.data} />
         </>
       )}
     </div>
@@ -87,13 +106,6 @@ function CampaignHeader({ campaign }: { campaign: Campaign }) {
         </dd>
         <dt className="text-muted-foreground">Campaign ID</dt>
         <dd>{campaign.utmId === null ? <span className="text-muted-foreground">None</span> : <code>{campaign.utmId}</code>}</dd>
-        <dt className="text-muted-foreground">Links</dt>
-        <dd>
-          {campaign.linkCount} of {CAMPAIGN_LINK_LIMIT}
-          {campaign.enabledLinkCount < campaign.linkCount ? `, ${campaign.enabledLinkCount} enabled` : null}
-        </dd>
-        <dt className="text-muted-foreground">Lifetime total</dt>
-        <dd>{campaign.clickCount.toLocaleString()}</dd>
       </dl>
       <div className="flex flex-wrap gap-2">
         {full ? (
@@ -135,12 +147,138 @@ function CampaignHeader({ campaign }: { campaign: Campaign }) {
 
 const NONE = <span className="text-muted-foreground">—</span>;
 
-function CampaignLinksTable({ campaign }: { campaign: Campaign }) {
+/**
+ * The campaign's numbers (ADR 0005, *Campaigns*): tiles, the comparison table and the combined breakdowns, over the
+ * links that belong to it now. Without breakdowns the lifetime total and the comparison on lifetime totals stay.
+ */
+function CampaignBody({ campaign }: { campaign: Campaign }) {
+  const [range, setRange] = useState<StatsRange>("7d");
+  const stats = useQuery(campaignStatsQuery(campaign.id, range));
+  const missing = stats.isError ? analyticsMissing(stats.error) : null;
+  const rangeClicks = stats.data?.series.reduce((sum, p) => sum + p.clicks, 0);
+
+  return (
+    <>
+      <Tiles
+        tiles={[
+          { label: "Lifetime total", value: campaign.clickCount, hint: "Exact: every click of the current links" },
+          ...(missing === null && rangeClicks !== undefined
+            ? [{ label: `Last ${RANGE_LABELS[range]}`, value: rangeClicks, hint: ESTIMATE_LABEL }]
+            : []),
+          { label: `Links (of ${CAMPAIGN_LINK_LIMIT})`, value: campaign.linkCount },
+          { label: "Enabled links", value: campaign.enabledLinkCount },
+        ]}
+      />
+      {missing === null ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            {ESTIMATE_LABEL}, in {browserTimeZone()} {range === "24h" ? "hours" : "days"}.
+          </p>
+          <RangeTabs range={range} onChange={setRange} />
+        </div>
+      ) : (
+        <AnalyticsHint missing={missing} dismissible={false} />
+      )}
+      <CampaignLinksTable campaign={campaign} analytics={missing === null} stats={stats.data} range={range} />
+      {missing === null ? <CampaignBreakdowns stats={stats} range={range} /> : null}
+    </>
+  );
+}
+
+function CampaignBreakdowns({ stats, range }: { stats: UseQueryResult<CampaignStats, unknown>; range: StatsRange }) {
+  return (
+    <section aria-label="Clicks" className="flex flex-col gap-4">
+      <h2 className="font-heading text-base font-semibold">Clicks, all links</h2>
+      {stats.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : stats.isError ? (
+        <p className="text-sm text-destructive">Could not load the click breakdowns.</p>
+      ) : (
+        <>
+          <BarSeries points={stats.data.series} range={range} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <TopList title="Countries" rows={stats.data.countries.map((r) => ({ label: r.country, clicks: r.clicks }))} />
+            <TopList title="Referrers" rows={stats.data.referrerHosts.map((r) => ({ label: r.host, clicks: r.clicks }))} />
+            <TopList
+              title="Devices"
+              rows={stats.data.deviceClasses.map((r) => ({ label: r.deviceClass, clicks: r.clicks }))}
+            />
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+type Fold = "link" | "source" | "medium";
+const FOLDS: Record<Fold, string> = { link: "By link", source: "By source", medium: "By medium" };
+
+/**
+ * One row per link, or folded into one per source or medium (case-insensitively, the links' current UTM values) from
+ * the rows already loaded: no extra request. With breakdowns the rows compare range clicks, otherwise lifetime totals.
+ */
+function CampaignLinksTable({
+  campaign,
+  analytics,
+  stats,
+  range,
+}: {
+  campaign: Campaign;
+  analytics: boolean;
+  stats: CampaignStats | undefined;
+  range: StatsRange;
+}) {
   const links = useQuery(campaignLinksQuery(campaign.id));
+  const [fold, setFold] = useState<Fold>("link");
+  const inRange = (link: LinkResource) => stats?.bySlug[link.slug]?.clicks ?? 0;
+  const compared = (link: LinkResource) => (analytics ? inRange(link) : link.clickCount);
+  const rangeHeader = `Last ${RANGE_LABELS[range]}`;
+  const rangeCell = (value: number, max: number) => (
+    <td className="px-3 py-2 text-right tabular-nums">
+      {stats === undefined ? (
+        "…"
+      ) : (
+        <span className="inline-flex items-center gap-2">
+          <ComparisonBar value={value} max={max} />
+          {value.toLocaleString()}
+        </span>
+      )}
+    </td>
+  );
+  const lifetimeCell = (value: number, max: number) => (
+    <td className="px-3 py-2 text-right tabular-nums">
+      {analytics ? (
+        value.toLocaleString()
+      ) : (
+        <span className="inline-flex items-center gap-2">
+          <ComparisonBar value={value} max={max} />
+          {value.toLocaleString()}
+        </span>
+      )}
+    </td>
+  );
 
   return (
     <section aria-label="Campaign links" className="flex flex-col gap-2">
-      <h2 className="font-heading text-base font-semibold">Links</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-heading text-base font-semibold">Links</h2>
+        {links.data !== undefined && links.data.items.length > 0 ? (
+          <div role="tablist" aria-label="Fold" className="flex gap-1">
+            {(Object.keys(FOLDS) as Fold[]).map((f) => (
+              <Button
+                key={f}
+                role="tab"
+                aria-selected={f === fold}
+                variant={f === fold ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setFold(f)}
+              >
+                {FOLDS[f]}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+      </div>
       {links.isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : links.isError ? (
@@ -153,41 +291,132 @@ function CampaignLinksTable({ campaign }: { campaign: Campaign }) {
           </Link>{" "}
           to create one per source and medium.
         </p>
+      ) : fold === "link" ? (
+        <LinkRows
+          links={links.data.items}
+          max={Math.max(...links.data.items.map(compared))}
+          analytics={analytics}
+          rangeHeader={rangeHeader}
+          inRange={inRange}
+          rangeCell={rangeCell}
+          lifetimeCell={lifetimeCell}
+        />
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table aria-label="Links" className="w-full text-sm">
-            <thead className="border-b bg-muted/40 text-left text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Short URL</th>
-                <th className="px-3 py-2 font-medium">Source</th>
-                <th className="px-3 py-2 font-medium">Medium</th>
-                <th className="px-3 py-2 font-medium">Content</th>
-                <th className="px-3 py-2 font-medium">Term</th>
-                <th className="px-3 py-2 text-right font-medium">Lifetime total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {links.data.items.map((link) => (
-                <tr key={link.slug} className={link.enabled ? "border-b last:border-0" : "border-b text-muted-foreground last:border-0"}>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link to="/links/$slug" params={{ slug: link.slug }} className="font-medium hover:underline">
-                        /{link.slug}
-                      </Link>
-                      <LinkBadges link={link} />
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">{link.utm?.source}</td>
-                  <td className="px-3 py-2">{link.utm?.medium}</td>
-                  <td className="px-3 py-2">{link.utm?.content ?? NONE}</td>
-                  <td className="px-3 py-2">{link.utm?.term ?? NONE}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{link.clickCount.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <FoldedRows
+          groups={groupByFoldKey(links.data.items, (link) => (fold === "source" ? link.utm?.source : link.utm?.medium) ?? "")
+            .map((g) => ({
+              ...g,
+              lifetime: g.members.reduce((sum, l) => sum + l.clickCount, 0),
+              inRange: g.members.reduce((sum, l) => sum + inRange(l), 0),
+            }))
+            .sort((a, b) => (analytics ? b.inRange - a.inRange : b.lifetime - a.lifetime))}
+          header={fold === "source" ? "Source" : "Medium"}
+          analytics={analytics}
+          rangeHeader={rangeHeader}
+          rangeCell={rangeCell}
+          lifetimeCell={lifetimeCell}
+        />
       )}
     </section>
+  );
+}
+
+type Cell = (value: number, max: number) => ReactNode;
+
+function LinkRows({
+  links,
+  max,
+  analytics,
+  rangeHeader,
+  inRange,
+  rangeCell,
+  lifetimeCell,
+}: {
+  links: LinkResource[];
+  max: number;
+  analytics: boolean;
+  rangeHeader: string;
+  inRange: (link: LinkResource) => number;
+  rangeCell: Cell;
+  lifetimeCell: Cell;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table aria-label="Links" className="w-full text-sm">
+        <thead className="border-b bg-muted/40 text-left text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 font-medium">Short URL</th>
+            <th className="px-3 py-2 font-medium">Source</th>
+            <th className="px-3 py-2 font-medium">Medium</th>
+            <th className="px-3 py-2 font-medium">Content</th>
+            <th className="px-3 py-2 font-medium">Term</th>
+            <th className="px-3 py-2 text-right font-medium">Lifetime total</th>
+            {analytics ? <th className="px-3 py-2 text-right font-medium">{rangeHeader}</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {links.map((link) => (
+            <tr key={link.slug} className={link.enabled ? "border-b last:border-0" : "border-b text-muted-foreground last:border-0"}>
+              <td className="px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link to="/links/$slug" params={{ slug: link.slug }} className="font-medium hover:underline">
+                    /{link.slug}
+                  </Link>
+                  <LinkBadges link={link} />
+                </div>
+              </td>
+              <td className="px-3 py-2">{link.utm?.source}</td>
+              <td className="px-3 py-2">{link.utm?.medium}</td>
+              <td className="px-3 py-2">{link.utm?.content ?? NONE}</td>
+              <td className="px-3 py-2">{link.utm?.term ?? NONE}</td>
+              {lifetimeCell(link.clickCount, max)}
+              {analytics ? rangeCell(inRange(link), max) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FoldedRows({
+  groups,
+  header,
+  analytics,
+  rangeHeader,
+  rangeCell,
+  lifetimeCell,
+}: {
+  groups: (FoldGroup<LinkResource> & { lifetime: number; inRange: number })[];
+  header: string;
+  analytics: boolean;
+  rangeHeader: string;
+  rangeCell: Cell;
+  lifetimeCell: Cell;
+}) {
+  const max = Math.max(...groups.map((g) => (analytics ? g.inRange : g.lifetime)));
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table aria-label={`Links by ${header.toLowerCase()}`} className="w-full text-sm">
+        <thead className="border-b bg-muted/40 text-left text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 font-medium">{header}</th>
+            <th className="px-3 py-2 text-right font-medium">Links</th>
+            <th className="px-3 py-2 text-right font-medium">Lifetime total</th>
+            {analytics ? <th className="px-3 py-2 text-right font-medium">{rangeHeader}</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g) => (
+            <tr key={g.key} className="border-b last:border-0">
+              <td className="px-3 py-2">{g.label}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{g.members.length}</td>
+              {lifetimeCell(g.lifetime, max)}
+              {analytics ? rangeCell(g.inRange, max) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

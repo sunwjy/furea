@@ -1,0 +1,25 @@
+{
+  "token": "TOKEN",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts?per_page=50",
+        "authorization": "Bearer TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "result": [
+            { "id": "ACCOUNT_ID", "name": "Personal", "type": "standard", "created_on": "2026-01-01T00:00:00.000000Z" },
+            { "id": "ACCOUNT_ID_2", "name": "Company", "type": "standard", "created_on": "2026-02-01T00:00:00.000000Z" }
+          ],
+          "result_info": { "page": 1, "per_page": 50, "total_pages": 1, "count": 2, "total_count": 2 },
+          "success": true,
+          "errors": [],
+          "messages": []
+        }
+      }
+    }
+  ]
+}

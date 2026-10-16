@@ -1,0 +1,47 @@
+{
+  "token": "cfat_TOKEN",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts?per_page=50",
+        "authorization": "Bearer cfat_TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "result": [
+            {
+              "id": "ACCOUNT_ID",
+              "name": "operator@example.com's Account",
+              "type": "standard",
+              "settings": { "enforce_twofactor": false, "api_access_enabled": null, "access_approval_expiry": null, "abuse_contact_email": null },
+              "legacy_flags": { "enterprise_zone_quota": { "maximum": 0, "current": 0, "available": 0 } },
+              "created_on": "2026-01-01T00:00:00.000000Z"
+            }
+          ],
+          "result_info": { "page": 1, "per_page": 50, "total_pages": 1, "count": 1, "total_count": 1 },
+          "success": true,
+          "errors": [],
+          "messages": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/tokens/verify",
+        "authorization": "Bearer cfat_TOKEN"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "result": { "id": "ID_1", "status": "active" },
+          "success": true,
+          "errors": [],
+          "messages": [{ "code": 10000, "message": "This API Token is valid and active", "type": null }]
+        }
+      }
+    }
+  ]
+}

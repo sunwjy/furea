@@ -2,7 +2,7 @@
 // destination; ADR 0003 password policy).
 
 import { z } from "zod";
-import { Destination } from "./links.ts";
+import { Destination, ScreeningOverride } from "./links.ts";
 
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 256;
@@ -22,6 +22,7 @@ export const UpdateSettingsRequest = z.strictObject({
   analyticsConfigured: ReadOnly("analyticsConfigured").optional(),
   analyticsMissing: ReadOnly("analyticsMissing").optional(),
   version: ReadOnly("version").optional(),
+  screening: ScreeningOverride,
 });
 type ReadOnlyField = "analyticsConfigured" | "analyticsMissing" | "version";
 export type UpdateSettingsRequest = Omit<z.input<typeof UpdateSettingsRequest>, ReadOnlyField>;

@@ -98,15 +98,31 @@ jobs:
     environment: cloudflare-ci
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      # Until the cloudflare-ci secrets exist the job passes with a notice instead of failing.
+      - id: secrets
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Integration skipped: CLOUDFLARE_API_TOKEN is not set in the cloudflare-ci environment."
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/checkout@v5
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec turbo run build
-      - run: pnpm test:integration
+      - if: steps.secrets.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.secrets.outputs.configured == 'true'
+        run: pnpm exec turbo run build
+      - if: steps.secrets.outputs.configured == 'true'
+        run: pnpm test:integration
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -10,8 +10,8 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ScreeningRefusal } from "@/components/screening-refusal";
-import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
+import { ScreeningRefusal, useScreeningOverride } from "@/components/screening-refusal";
+import { ApiError, fieldDetails } from "@/lib/api";
 import { CAMPAIGNS_KEY, campaignListQuery, createCampaign } from "@/lib/campaigns";
 
 export const Route = createFileRoute("/_authed/campaigns/new")({
@@ -44,8 +44,8 @@ function NewCampaignPage() {
   const [utmErrors, setUtmErrors] = useState<Partial<Record<(typeof UTM_FIELDS)[number], string>>>({});
   const utmCampaign = (typedUtmCampaign ?? name).trim();
   const reusedBy = useUtmCampaignHolder(utmCampaign);
-  const [refused, setRefused] = useState<{ host: string; body: CreateCampaignRequest } | null>(null);
-  const [overriding, setOverriding] = useState(false);
+  const screening = useScreeningOverride<CreateCampaignRequest>("baseUrl");
+  const { refused } = screening;
 
   const onSubmit = form.handleSubmit(async ({ name, baseUrl }) => {
     const body: CreateCampaignRequest = { name, baseUrl };
@@ -55,7 +55,7 @@ function NewCampaignPage() {
   });
 
   async function send(body: CreateCampaignRequest) {
-    setRefused(null);
+    screening.clear();
     setUtmErrors({});
     try {
       const campaign = await createCampaign(body);
@@ -63,11 +63,7 @@ function NewCampaignPage() {
       toast.success(`Created ${campaign.name}. Add its links now.`);
       await navigate({ to: "/campaigns/$id/add", params: { id: campaign.id } });
     } catch (error) {
-      const host = flaggedHost(error, "baseUrl");
-      if (host !== null) {
-        setRefused({ host, body });
-        return;
-      }
+      if (screening.catchRefusal(error, body)) return;
       if (error instanceof ApiError && error.code === "campaign_name_taken") {
         form.setError("name", { message: "Another campaign has this name (compared ignoring case)." });
         return;
@@ -80,15 +76,6 @@ function NewCampaignPage() {
       }
       for (const detail of fieldErrors) form.setError(detail.field, { message: detail.message });
       setUtmErrors(Object.fromEntries(utmFieldErrors.map((detail) => [detail.field, detail.message])));
-    }
-  }
-
-  async function createAnyway(body: CreateCampaignRequest) {
-    setOverriding(true);
-    try {
-      await send({ ...body, screening: "skip" });
-    } finally {
-      setOverriding(false);
     }
   }
 
@@ -131,8 +118,8 @@ function NewCampaignPage() {
             <ScreeningRefusal
               host={refused.host}
               action="Create anyway"
-              pending={overriding || isSubmitting}
-              onOverride={() => void createAnyway(refused.body)}
+              pending={screening.overriding || isSubmitting}
+              onOverride={() => void screening.override(send)}
             />
           )}
           <div className="grid gap-4 sm:grid-cols-2">

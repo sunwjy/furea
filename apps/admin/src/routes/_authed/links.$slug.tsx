@@ -29,9 +29,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ScreeningRefusal } from "@/components/screening-refusal";
-import { UtmBuilder } from "@/components/utm-builder";
-import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
+import { ScreeningRefusal, useScreeningOverride } from "@/components/screening-refusal";
+import { composeInto, UtmBuilder } from "@/components/utm-builder";
+import { ApiError, fieldDetails } from "@/lib/api";
 import { campaignListQuery } from "@/lib/campaigns";
 import { linkQuery } from "@/lib/links";
 import { analyticsMissing, browserTimeZone, linkStatsQuery } from "@/lib/stats";
@@ -280,12 +280,8 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
   const { errors, isSubmitting } = form.formState;
   const destination = form.watch("destination");
   // The refused request, kept for "Save anyway"; it lapses once the destination is edited.
-  const [refused, setRefused] = useState<{ host: string; body: UpdateLinkRequest } | null>(null);
-
-  // The builder's output replaces the destination; it is validated as typed once the form was submitted.
-  function composeDestination(destination: string) {
-    form.setValue("destination", destination, { shouldDirty: true, shouldValidate: form.formState.isSubmitted });
-  }
+  const screening = useScreeningOverride<UpdateLinkRequest>("destination");
+  const { refused } = screening;
 
   // Only what changed is sent: a merge-patch, and an unchanged destination is not set again.
   const onSubmit = form.handleSubmit(async ({ destination, title }) => {
@@ -296,17 +292,13 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
   });
 
   async function send(body: UpdateLinkRequest) {
-    setRefused(null);
+    screening.clear();
     try {
       await update.mutateAsync(body);
       toast.success(`Saved /${link.slug}.`);
       onDone();
     } catch (error) {
-      const host = flaggedHost(error, "destination");
-      if (host !== null) {
-        setRefused({ host, body });
-        return;
-      }
+      if (screening.catchRefusal(error, body)) return;
       const fieldErrors = fieldDetails(error, FIELDS);
       if (fieldErrors.length === 0) {
         toast.error(error instanceof ApiError ? error.message : "Could not save the link. Try again.");
@@ -335,11 +327,11 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
           <ScreeningRefusal
             host={refused.host}
             action="Save anyway"
-            pending={update.isPending || isSubmitting}
-            onOverride={() => void send({ ...refused.body, screening: "skip" })}
+            pending={screening.overriding || update.isPending || isSubmitting}
+            onOverride={() => void screening.override(send)}
           />
         )}
-        <UtmBuilder destination={destination} onCompose={composeDestination} />
+        <UtmBuilder destination={destination} onCompose={composeInto(form, "destination")} />
         <Field data-invalid={errors.title ? true : undefined}>
           <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
           <Input id="title" aria-invalid={errors.title ? true : undefined} {...form.register("title")} />

@@ -2,7 +2,7 @@
 // campaign and utm_id changes rewrite every member after a confirmation naming the link count, and Enable all /
 // Disable all.
 
-import { BaseUrl, CampaignName, type Campaign, type UpdateCampaignRequest } from "@furea/shared";
+import { BaseUrl, CampaignName, RequiredUtmValue, UtmValue, type Campaign, type UpdateCampaignRequest } from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Power, PowerOff } from "lucide-react";
@@ -23,8 +23,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ScreeningRefusal } from "@/components/screening-refusal";
-import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
+import { ScreeningRefusal, useScreeningOverride } from "@/components/screening-refusal";
+import { ApiError, fieldDetails } from "@/lib/api";
 import { CAMPAIGNS_KEY, setCampaignLinksEnabled, updateCampaign } from "@/lib/campaigns";
 import { LINKS_KEY } from "@/lib/links";
 
@@ -32,8 +32,8 @@ const EditCampaignForm = z.object({
   name: CampaignName,
   baseUrl: BaseUrl,
   // Named after the parameters, so the browser's own autocomplete suggests earlier values (ADR 0014).
-  utm_campaign: z.string().trim().min(1, { message: "Required." }),
-  utm_id: z.string().trim(),
+  utm_campaign: RequiredUtmValue,
+  utm_id: UtmValue,
 });
 type EditCampaignInput = z.input<typeof EditCampaignForm>;
 type EditCampaignValues = z.output<typeof EditCampaignForm>;
@@ -62,7 +62,8 @@ export function CampaignEditForm({ campaign, onDone }: { campaign: Campaign; onD
   const baseUrl = form.watch("baseUrl");
   // The patch waiting for the operator to confirm the rewrite.
   const [confirming, setConfirming] = useState<UpdateCampaignRequest | null>(null);
-  const [refused, setRefused] = useState<{ host: string; body: UpdateCampaignRequest } | null>(null);
+  const screening = useScreeningOverride<UpdateCampaignRequest>("baseUrl");
+  const { refused } = screening;
   const [tooLong, setTooLong] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
 
@@ -79,7 +80,7 @@ export function CampaignEditForm({ campaign, onDone }: { campaign: Campaign; onD
 
   async function send(body: UpdateCampaignRequest) {
     setConfirming(null);
-    setRefused(null);
+    screening.clear();
     setTooLong([]);
     setSending(true);
     try {
@@ -93,11 +94,7 @@ export function CampaignEditForm({ campaign, onDone }: { campaign: Campaign; onD
       );
       onDone();
     } catch (error) {
-      const host = flaggedHost(error, "baseUrl");
-      if (host !== null) {
-        setRefused({ host, body });
-        return;
-      }
+      if (screening.catchRefusal(error, body)) return;
       if (error instanceof ApiError && error.code === "campaign_name_taken") {
         form.setError("name", { message: "Another campaign has this name (compared ignoring case)." });
         return;
@@ -151,7 +148,7 @@ export function CampaignEditForm({ campaign, onDone }: { campaign: Campaign; onD
             host={refused.host}
             action="Save anyway"
             pending={pending}
-            onOverride={() => void send({ ...refused.body, screening: "skip" })}
+            onOverride={() => void screening.override(send)}
           />
         )}
         <div className="grid gap-4 sm:grid-cols-2">

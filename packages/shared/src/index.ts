@@ -11,5 +11,5 @@ export * from "./api/links.ts";
 export * from "./api/stats.ts";
 export * from "./api/settings.ts";
 export * from "./api/campaigns.ts";
-export { CampaignLinkUtmPatch } from "./api/utm-values.ts";
+export { CampaignLinkUtmPatch, OptionalUtmValue, RequiredUtmValue, UtmValue } from "./api/utm-values.ts";
 export * from "./adopt.ts";

@@ -2,7 +2,39 @@
 // resends the same request with `"screening": "skip"`.
 
 import { ShieldAlert } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { flaggedHost } from "@/lib/api";
+
+/**
+ * The "refused, then save anyway" flow of every form that sets a destination: `catchRefusal` keeps a request the API
+ * refused for a flagged host in `field`, and `override` resends it with `"screening": "skip"`.
+ */
+export function useScreeningOverride<B extends { screening?: "skip" | undefined }>(field: string) {
+  const [refused, setRefused] = useState<{ host: string; body: B } | null>(null);
+  const [overriding, setOverriding] = useState(false);
+  return {
+    refused,
+    overriding,
+    clear: () => setRefused(null),
+    /** Keeps `body` when `error` is the refusal of a flagged host in the field; whether it was. */
+    catchRefusal(error: unknown, body: B): boolean {
+      const host = flaggedHost(error, field);
+      if (host === null) return false;
+      setRefused({ host, body });
+      return true;
+    },
+    async override(send: (body: B) => Promise<void>): Promise<void> {
+      if (refused === null) return;
+      setOverriding(true);
+      try {
+        await send({ ...refused.body, screening: "skip" });
+      } finally {
+        setOverriding(false);
+      }
+    },
+  };
+}
 
 export function ScreeningRefusal({
   host,

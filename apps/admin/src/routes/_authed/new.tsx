@@ -3,16 +3,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ScreeningRefusal } from "@/components/screening-refusal";
-import { UtmBuilder } from "@/components/utm-builder";
-import { ApiError, fieldDetails, flaggedHost } from "@/lib/api";
+import { ScreeningRefusal, useScreeningOverride } from "@/components/screening-refusal";
+import { composeInto, UtmBuilder } from "@/components/utm-builder";
+import { ApiError, fieldDetails } from "@/lib/api";
 import { createLink, LINKS_KEY } from "@/lib/links";
 
 export const Route = createFileRoute("/_authed/new")({
@@ -40,13 +39,8 @@ function NewLinkPage() {
   const { errors, isSubmitting } = form.formState;
   const destination = form.watch("destination");
   // The refused request, kept for "Create anyway"; it lapses once the destination is edited.
-  const [refused, setRefused] = useState<{ host: string; body: CreateLinkRequest } | null>(null);
-  const [overriding, setOverriding] = useState(false);
-
-  // The builder's output replaces the destination; it is validated as typed once the form was submitted.
-  function composeDestination(destination: string) {
-    form.setValue("destination", destination, { shouldDirty: true, shouldValidate: form.formState.isSubmitted });
-  }
+  const screening = useScreeningOverride<CreateLinkRequest>("destination");
+  const { refused } = screening;
 
   const onSubmit = form.handleSubmit(async ({ destination, slug, title }) => {
     const body: CreateLinkRequest = { destination };
@@ -56,7 +50,7 @@ function NewLinkPage() {
   });
 
   async function send(body: CreateLinkRequest) {
-    setRefused(null);
+    screening.clear();
     try {
       const link = await createLink(body);
       await queryClient.invalidateQueries({ queryKey: LINKS_KEY });
@@ -67,22 +61,9 @@ function NewLinkPage() {
     }
   }
 
-  async function createAnyway(body: CreateLinkRequest) {
-    setOverriding(true);
-    try {
-      await send({ ...body, screening: "skip" });
-    } finally {
-      setOverriding(false);
-    }
-  }
-
   /** The API's per-field details land on the matching inputs; anything else is a toast. */
   function showServerErrors(error: unknown, body: CreateLinkRequest) {
-    const host = flaggedHost(error, "destination");
-    if (host !== null) {
-      setRefused({ host, body });
-      return;
-    }
+    if (screening.catchRefusal(error, body)) return;
     if (error instanceof ApiError && error.code === "slug_taken") {
       form.setError("slug", { message: "This slug is taken. Choose another one." });
       return;
@@ -123,11 +104,11 @@ function NewLinkPage() {
             <ScreeningRefusal
               host={refused.host}
               action="Create anyway"
-              pending={overriding || isSubmitting}
-              onOverride={() => void createAnyway(refused.body)}
+              pending={screening.overriding || isSubmitting}
+              onOverride={() => void screening.override(send)}
             />
           )}
-          <UtmBuilder destination={destination} onCompose={composeDestination} />
+          <UtmBuilder destination={destination} onCompose={composeInto(form, "destination")} />
           <Field data-invalid={errors.slug ? true : undefined}>
             <FieldLabel htmlFor="slug">Custom slug (optional)</FieldLabel>
             <Input

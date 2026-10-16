@@ -1,7 +1,7 @@
 // A campaign link's edit form (ADR 0012, ADR 0014): its own UTM values and title. The destination is composed from
 // the campaign, so it is shown read-only and recomposed by the Worker; detaching is the way to send it elsewhere.
 
-import { Title, type Link as LinkResource, type UpdateLinkRequest } from "@furea/shared";
+import { RequiredUtmValue, Title, UtmValue, type Link as LinkResource, type UpdateLinkRequest } from "@furea/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -14,14 +14,12 @@ import { Input } from "@/components/ui/input";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { CAMPAIGNS_KEY } from "@/lib/campaigns";
 
-const Required = z.string().trim().min(1, { message: "Required." });
-
 // Named after the parameters, so the browser's own autocomplete suggests earlier values (ADR 0014).
 const EditCampaignLinkForm = z.object({
-  utm_source: Required,
-  utm_medium: Required,
-  utm_content: z.string().trim(),
-  utm_term: z.string().trim(),
+  utm_source: RequiredUtmValue,
+  utm_medium: RequiredUtmValue,
+  utm_content: UtmValue,
+  utm_term: UtmValue,
   title: Title,
 });
 type EditCampaignLinkInput = z.input<typeof EditCampaignLinkForm>;

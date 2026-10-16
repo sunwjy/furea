@@ -1,6 +1,7 @@
 import { composeUtm, hasUtmKey, missingUtmCore, parseUtm, type UtmKey, type UtmWarning } from "@furea/shared";
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import { useId, useState } from "react";
+import type { FieldValues, Path, PathValue, UseFormReturn } from "react-hook-form";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
@@ -109,4 +110,16 @@ export function UtmBuilder({ destination, onCompose }: { destination: string; on
       </div>
     </div>
   );
+}
+
+/**
+ * The builder's `onCompose` for a react-hook-form destination field: the output replaces the field's value, which is
+ * validated as typed once the form was submitted.
+ */
+export function composeInto<T extends FieldValues, C, V extends FieldValues>(form: UseFormReturn<T, C, V>, name: Path<T>) {
+  return (destination: string) =>
+    form.setValue(name, destination as PathValue<T, Path<T>>, {
+      shouldDirty: true,
+      shouldValidate: form.formState.isSubmitted,
+    });
 }

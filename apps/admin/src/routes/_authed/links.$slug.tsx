@@ -11,6 +11,7 @@ import { EnableToggle, LinkBadges, SyncPendingNotice, useUpdateLink } from "@/co
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { UtmBuilder } from "@/components/utm-builder";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { linkQuery } from "@/lib/links";
 
@@ -99,6 +100,11 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
   });
   const { errors, isSubmitting } = form.formState;
 
+  // The builder's output replaces the destination; it is validated as typed once the form was submitted.
+  function composeDestination(destination: string) {
+    form.setValue("destination", destination, { shouldDirty: true, shouldValidate: form.formState.isSubmitted });
+  }
+
   // Only what changed is sent: a merge-patch, and an unchanged destination is not set again.
   const onSubmit = form.handleSubmit(async ({ destination, title }) => {
     const body: UpdateLinkRequest = {};
@@ -133,6 +139,7 @@ function EditForm({ link, onDone }: { link: LinkResource; onDone: () => void }) 
           />
           <FieldError errors={[errors.destination]} />
         </Field>
+        <UtmBuilder destination={form.watch("destination")} onCompose={composeDestination} />
         <Field data-invalid={errors.title ? true : undefined}>
           <FieldLabel htmlFor="title">Title (optional)</FieldLabel>
           <Input id="title" aria-invalid={errors.title ? true : undefined} {...form.register("title")} />

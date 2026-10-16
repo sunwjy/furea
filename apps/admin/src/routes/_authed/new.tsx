@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { UtmBuilder } from "@/components/utm-builder";
 import { ApiError, fieldDetails } from "@/lib/api";
 import { createLink, LINKS_KEY } from "@/lib/links";
 
@@ -35,6 +36,11 @@ function NewLinkPage() {
     defaultValues: { destination: "", slug: "", title: "" },
   });
   const { errors, isSubmitting } = form.formState;
+
+  // The builder's output replaces the destination; it is validated as typed once the form was submitted.
+  function composeDestination(destination: string) {
+    form.setValue("destination", destination, { shouldDirty: true, shouldValidate: form.formState.isSubmitted });
+  }
 
   const onSubmit = form.handleSubmit(async ({ destination, slug, title }) => {
     const body: CreateLinkRequest = { destination };
@@ -88,6 +94,7 @@ function NewLinkPage() {
             />
             <FieldError errors={[errors.destination]} />
           </Field>
+          <UtmBuilder destination={form.watch("destination")} onCompose={composeDestination} />
           <Field data-invalid={errors.slug ? true : undefined}>
             <FieldLabel htmlFor="slug">Custom slug (optional)</FieldLabel>
             <Input
